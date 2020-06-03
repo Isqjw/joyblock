@@ -534,7 +534,7 @@ int main()
         if (1 == allready) {
             break;
         }
-        joyClientRecvData(clientRecvCallBack);
+        joyClientReadRecvData(clientRecvCallBack);
     }
     // 发包
     for (int i = 0; i < pkgcnt; ++i) {
@@ -543,12 +543,12 @@ int main()
             if (0 == joyClientWriteSendData(test, len, j + 1, j + 1)) {
                 totallen += len;
             }
-            joyClientRecvData(clientRecvCallBack);
+            joyClientReadRecvData(clientRecvCallBack);
         }
     }
     while(1){
         joyClientProcSendData();
-        joyClientRecvData(clientRecvCallBack);
+        joyClientReadRecvData(clientRecvCallBack);
         time(&now);
         if (tick + 10 < now) {
             tick = now;
