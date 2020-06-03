@@ -483,7 +483,7 @@ int joyBlockWriteSendPkg(int procid, struct JoyBlockRWBuf *wbuf)
         return -1;
     }
 
-    if (procid < 0 || kMaxBlockChainNum <= procid || NULL == wbuf) {
+    if (procid < 0 || kJoynetMaxProcID <= procid || NULL == wbuf) {
         debug_msg("error: invalid param, procid[%d], wbuf[%p]", procid, wbuf);
         return -1;
     }
@@ -501,7 +501,7 @@ int joyBlockSendData(int fd, int procid)
         return -1;
     }
 
-    if (procid < 0 || kMaxBlockChainNum <= procid) {
+    if (procid < 0 || kJoynetMaxProcID <= procid) {
         debug_msg("error: invalid param, procid[%d]", procid);
         return -1;
     }
@@ -549,7 +549,7 @@ int joyBlockReadRecvPkg(int procid, struct JoyBlockRWBuf *rbuf)
         return -1;
     }
 
-    if (procid < 0 || kMaxBlockChainNum <= procid || NULL == rbuf) {
+    if (procid < 0 || kJoynetMaxProcID <= procid || NULL == rbuf) {
         debug_msg("error: invalid param, procid[%d], rbuf[%p]", procid, rbuf);
         return -1;
     }
@@ -568,7 +568,7 @@ int joyBlockReleaseRecvBuf(int procid, struct JoyBlockRWBuf *rbuf)
         return -1;
     }
 
-    if (procid < 0 || kMaxBlockChainNum <= procid || NULL == rbuf) {
+    if (procid < 0 || kJoynetMaxProcID <= procid || NULL == rbuf) {
         debug_msg("error: invalid param, procid[%d], rbuf[%p]", procid, rbuf);
         return -1;
     }
@@ -585,7 +585,7 @@ int joyBlockRecvData(int fd, int procid)
         return -1;
     }
 
-    if (procid < 0 || kMaxBlockChainNum <= procid) {
+    if (procid < 0 || kJoynetMaxProcID <= procid) {
         debug_msg("error: invalid param, procid[%d]", procid);
         return -1;
     }
@@ -674,7 +674,7 @@ int joyBlockReleaseBlockChain(int procid)
         return -1;
     }
 
-    if (procid < 0 || kMaxBlockChainNum <= procid) {
+    if (procid < 0 || kJoynetMaxProcID <= procid) {
         debug_msg("error: invalid param, procid[%d]", procid);
         return -1;
     }
@@ -712,7 +712,7 @@ int joyBlockReleaseBlockChain(int procid)
         return -1;
     }
 
-    if (procid < 0 || kMaxBlockChainNum <= procid) {
+    if (procid < 0 || kJoynetMaxProcID <= procid) {
         debug_msg("error: invalid param, procid[%d]", procid);
         return -1;
     }
@@ -756,7 +756,7 @@ int joyBlockListCheck()
     }
 
     int usedBlockNum = 0;
-    for (int i = 0; i < kMaxBlockChainNum; ++i) {
+    for (int i = 0; i < kJoynetMaxProcID; ++i) {
         int twohead[2] = { g_blocklist->blockChains[i].sendhead, g_blocklist->blockChains[i].recvhead };
         for (int j = 0; j < 2; ++j) {
             int headpos = twohead[j];

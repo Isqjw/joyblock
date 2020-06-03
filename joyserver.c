@@ -1,4 +1,3 @@
-#include <string.h>
 #include <arpa/inet.h>
 #include "joyserver.h"
 
@@ -186,7 +185,7 @@ int joyServerReadRecvData(joyRecvCallBack recvCallBack)
         }
 
         if (node->shakebufpos < sizeof(struct JoynetHead)) {
-            if (node->createtick + kShakeWaitSecond < curtick) {
+            if (node->createtick + kJoynetShakeWaitSecond < curtick) {
                 debug_msg("error: shake msg timeout.");
                 joyServerCloseTcp_(node->cfd);
             }
@@ -202,6 +201,7 @@ int joyServerReadRecvData(joyRecvCallBack recvCallBack)
         node->procid = pkghead->srcid;
         node->status = kJoynetStatusConnected;
         node->shakebufpos = 0;
+        joynetSetNodeIndex(&joyServer.cpool, i, node->procid);
 
         struct JoynetHead shakepkg;
         memset(&shakepkg, 0, sizeof(shakepkg));
@@ -368,7 +368,7 @@ static int serverRecvCallBack(char *buf, struct JoynetHead *pkghead)
 int main()
 {
     struct JoyBlockConfig cfg = { 1024, 50, 15 };
-    joyBlockInit(cfg);
+    joynetInit(&joyServer.cpool, cfg);
 
     if (0 != joyServerListen("0.0.0.0", 20000)) {
         return -1;

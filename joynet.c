@@ -122,7 +122,7 @@ int joynetRecvBuf(struct JoyConnectNode* node)
     }
 
     if (kJoynetStatusShakeHand == node->status) {
-        int leftroom = kShakeBufSize - node->shakebufpos;
+        int leftroom = kJoynetShakeBufSize - node->shakebufpos;
         if (leftroom <= 0) {
             return 0;
         }
@@ -197,13 +197,14 @@ int joynetGetConnectNodePosByFD(struct JoyConnectPool *cp, int cfd)
     return -1;
 }
 
-// 待扩展, 支持多个相同id
-// TODO chenhu: 当是Server端, 使用zoneid作为下标索引,提高效率O(1)
 int joynetGetConnectNodePosByID(struct JoyConnectPool *cp, int id)
 {
-    if (NULL == cp) {
-        debug_msg("error: invalid param cp[%p].\n", cp);
+    if (NULL == cp || id < 0 || kJoynetMaxProcID <= id) {
+        debug_msg("error: invalid param, cp[%p], id[%d].\n", cp, id);
         return -1;
+    }
+    if (-1 != cp->nodeidx[id]){
+        return cp->nodeidx[id];
     }
     for (int i = 0; i < cp->nodes; ++i) {
         if (id == cp->node[i].procid) {
@@ -263,4 +264,20 @@ int joynetInsertConnectNode(struct JoyConnectPool *cp, int cfd)
     cp->node[lastpos].createtick = tick;
     cp->nodes++;
     return lastpos;
+}
+
+int joynetInit(struct JoyConnectPool *cp, struct JoyBlockConfig conf)
+{
+    memset(cp->nodeidx, -1, sizeof(cp->nodeidx));
+    return joyBlockInit(conf);
+}
+
+int joynetSetNodeIndex(struct JoyConnectPool *cp, int nodepos, int procid)
+{
+    if (NULL == cp || nodepos < 0 || kEpollMaxFDs <= nodepos || procid < 0 || kJoynetMaxProcID <= procid) {
+        debug_msg("error: invalid param, cp[%p] nodepos[%d], procid[%d]", cp, nodepos, procid);
+        return -1;
+    }
+    cp->nodeidx[procid] = nodepos;
+    return 0;
 }

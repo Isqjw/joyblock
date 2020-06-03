@@ -2,16 +2,10 @@
 #define __JOY_BLOCK_H
 
 #include "debug.h"
-#include "joynet.h"
+#include "joyconst.h"
 
 #include <stdlib.h>
 
-#define kMaxBlockChainNum  65536
-
-#ifdef __cplusplus
-
-extern "C" {
-#endif
 
 struct JoyBlockConfig {
     int blockNum;       //block的数量
@@ -52,10 +46,15 @@ struct JoyBufferBlockList {
     int lastAvailPos;
 
     // block链表索引(zoneid作为下标)
-    struct JoyBlockChain blockChains[kMaxBlockChainNum];
+    struct JoyBlockChain blockChains[kJoynetMaxProcID];
 
     struct JoyBufferBlock blocks[1];   // 具体大小可以配置
 };
+
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 int joyBlockInit(struct JoyBlockConfig cfg);
 int joyBlockWriteSendPkg(int procid, struct JoyBlockRWBuf *wbuf);

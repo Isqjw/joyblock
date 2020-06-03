@@ -11,15 +11,15 @@
 #define kListenBacklog  1024                    //建立连接(ESTABLISHED状态)的最大数量
 
 
-#ifdef __cplusplus
-extern "C" {
-#endif
-
 struct JoyServer {
     int efd;                                //epoll fd
     int lfd;                                //监听fd
     struct JoyConnectPool cpool;            //连接池
 };
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 int joyServerListen(const char *addr, int port);
 int joyServerCloseTcp();
