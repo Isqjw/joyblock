@@ -10,18 +10,23 @@
 #define kJoyClientSendBufSize 10 * 1024 * 1024   //10MB发送缓存
 #define kJoyClientRecvBufSize 10 * 1024 * 1024   //10MB接受缓存
 
+#define kJoyClientMaxNidNum 64
+
 
 struct JoyClient {
-    struct JoyConnectPool cpool;            //连接池
+    int nids;
+    int nid[kJoyClientMaxNidNum];
+    struct JoyConnectPool *cpool;            //连接池
 };
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+int joyClientInit(struct JoyBlockConfig conf, int nids, int *nid, int nodeNum);
+int joyClientTick();
 int joyClientConnectTcp(const char *addr, int port, int procid, int routerid);
 int joyClientIsReady(int routerid);
-int joyClientAllReady();
 int joyClientCloseTcp(int routerid);
 int joyClientProcRecvData();
 int joyClientReadRecvData(joyRecvCallBack recvCallBack);

@@ -13,11 +13,8 @@ struct JoyBlockConfig {
     int blockChainLen;  //block链表的长度
 };
 
-struct JoyBufferBlock {
-    int nextAvailPos;   // 下一个可用节点位置
-    int nextUsedPos;    // 下一个已占用的block位置
-
-    char isTake;        // 是否被占用
+struct JoyBlock {
+    int nextUsedPos;
 
     int dataHead;
     int dataTail;
@@ -39,16 +36,12 @@ struct JoyBlockRWBuf {
     char *buf[2];
 };
 
-struct JoyBufferBlockList {
-    struct JoyBlockConfig config;
-
-    int firstAvailPos;
-    int lastAvailPos;
-
+struct JoyBlockMem {
     // block链表索引(zoneid作为下标)
+    int blockSize;
+    int maxBlockChainLen;
     struct JoyBlockChain blockChains[kJoynetMaxProcID];
 
-    struct JoyBufferBlock blocks[1];   // 具体大小可以配置
 };
 
 
@@ -65,7 +58,7 @@ int joyBlockRecvData(int fd, int procid);
 int joyBlockReleaseBlockChain(int procid);
 // int joyBlockGetSendBufLeftRoom(int procid);
 
-int joyBlockListCheck();
+int joyBlockMemCheck();
 
 #ifdef __cplusplus
 }

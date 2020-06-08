@@ -26,11 +26,13 @@ enum JoynetStatus {
     kJoynetStatusConnecting     = 2, //正在连接
     kJoynetStatusShakeHand      = 3, //握手
     kJoynetStatusConnected      = 4, //已连接
+    kJoynetStatusStop           = 5, //已停止
 };
 
 enum JoynetMsgType {
     kJoynetMsgTypeMsg           = 0, //消息包
     kJoynetMsgTypeShake         = 1, //握手(注册)包
+    kJoynetMsgTypeStop          = 2, //停服
 };
 
 struct JoynetHead {
@@ -53,8 +55,6 @@ struct JoyConnectNode {
 };
 
 struct JoyConnectPool {
-    int nodes;
-    struct JoyConnectNode node[kEpollMaxFDs];
     int nodeidx[kJoynetMaxProcID];          //procid作为下标, 索引node
 };
 
@@ -83,12 +83,13 @@ int joynetMakePkgHead(struct JoynetHead *pkghead, const char *buf, int len, int 
 
 
 //节点
-int joynetInit(struct JoyConnectPool *cp, struct JoyBlockConfig conf);
-int joynetGetConnectNodePosByFD(struct JoyConnectPool *cp, int cfd);
-int joynetGetConnectNodePosByID(struct JoyConnectPool *cp, int id);
-int joynetDelConnectNode(struct JoyConnectPool *cp, int cfd);
-int joynetInsertConnectNode(struct JoyConnectPool *cp, int cfd);
-int joynetSetNodeIndex(struct JoyConnectPool *cp, int nodepos, int procid);
+int joynetInit(struct JoyConnectPool **cp, struct JoyBlockConfig conf, int nodeNum);
+struct JoyConnectNode *joynetGetConnectNodeByPos(struct JoyConnectPool *cp, int pos);
+struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int cfd);
+struct JoyConnectNode *joynetGetConnectNodeByID(struct JoyConnectPool *cp, int id);
+int joynetReleaseConnectNode(struct JoyConnectPool *cp, int cfd);
+struct JoyConnectNode *joynetAllocConnectNode(struct JoyConnectPool *cp, int cfd, int *pos);
+int joynetGetNextUsedPos(struct JoyConnectPool *cp, int pos);
 
 
 #ifdef __cplusplus
