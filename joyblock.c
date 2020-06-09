@@ -148,7 +148,7 @@ static int joyBlockWritePkg_(int *head, struct JoyBlockRWBuf *wbuf)
     if (leftroom < totallen) {
         if (g_blockmem->maxBlockChainLen <= chainlen) {
             debug_msg("error: write buffer is full, chain len[%d], chain head[%d]", chainlen, *head);
-            return -1;
+            return 0;
         }
 
         if (1 != memPoolAvailable(g_blockmem)) {
@@ -486,7 +486,7 @@ int joyBlockRecvData(int fd, int procid)
 
     int leftroom = g_blockmem->blockSize - tailBlock->dataTail;
     if (leftroom <= 0) {
-        if (g_blockmem->maxBlockChainLen<= chainlen) {
+        if (g_blockmem->maxBlockChainLen <= chainlen) {
             debug_msg("warn: recv buffer is full, chain len[%d], chain head[%d]", chainlen, blockChain->recvhead);
             return 0;
         }

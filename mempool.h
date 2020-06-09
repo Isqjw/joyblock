@@ -6,7 +6,7 @@
 struct MemBlock {
     int nextAvailPos;   // 下一个可用节点
     int nextUsedPos;    // 下一个已用节点
-    int preUsedPos;    // 上一个已用节点
+    int preUsedPos;     // 上一个已用节点
     char isused;        // 是否被使用
 };
 

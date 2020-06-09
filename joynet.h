@@ -33,6 +33,7 @@ enum JoynetMsgType {
     kJoynetMsgTypeMsg           = 0, //消息包
     kJoynetMsgTypeShake         = 1, //握手(注册)包
     kJoynetMsgTypeStop          = 2, //停服
+    kJoynetMsgTypeMax           = 3,
 };
 
 struct JoynetHead {
@@ -46,6 +47,7 @@ struct JoynetHead {
 };
 
 struct JoyConnectNode {
+    int pos;                                //池子中的位置
     int cfd;                                //连接fd
     int procid;                             //对端进程id
     enum JoynetStatus status;               //连接状态
@@ -54,11 +56,13 @@ struct JoyConnectNode {
     char shakebuf[kJoynetShakeBufSize];           //临时缓存握手协议(握手的时候还不知道对端的procid, 无法直接写入block)
 };
 
+typedef int (*JoyNodeCallBack)(struct JoyConnectNode *node);
+typedef int (*JoyRecvCallBack)(char *buf, struct JoynetHead *pkghead);
+
 struct JoyConnectPool {
+    JoyRecvCallBack cmap[kJoynetMsgTypeMax];
     int nodeidx[kJoynetMaxProcID];          //procid作为下标, 索引node
 };
-
-typedef int (*joyRecvCallBack)(char *buf, struct JoynetHead *pkghead);
 
 
 #ifdef __cplusplus
@@ -66,6 +70,7 @@ extern "C" {
 #endif
 
 //网络
+int joynetClose(int fd);
 int joynetSetNoBlocking(int fd);
 int joynetSetTcpNoDelay(int fd);
 int joynetSetTcpKeepAlive(int fd);
@@ -83,13 +88,16 @@ int joynetMakePkgHead(struct JoynetHead *pkghead, const char *buf, int len, int 
 
 
 //节点
-int joynetInit(struct JoyConnectPool **cp, struct JoyBlockConfig conf, int nodeNum);
+int joynetInit(struct JoyConnectPool **cp, JoyRecvCallBack *cmap, struct JoyBlockConfig conf, int nodeNum);
 struct JoyConnectNode *joynetGetConnectNodeByPos(struct JoyConnectPool *cp, int pos);
 struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int cfd);
 struct JoyConnectNode *joynetGetConnectNodeByID(struct JoyConnectPool *cp, int id);
-int joynetReleaseConnectNode(struct JoyConnectPool *cp, int cfd);
-struct JoyConnectNode *joynetAllocConnectNode(struct JoyConnectPool *cp, int cfd, int *pos);
+int joynetReleaseConnectNode(struct JoyConnectPool *cp, struct JoyConnectNode *node);
+struct JoyConnectNode *joynetAllocConnectNode(struct JoyConnectPool *cp, int cfd);
 int joynetGetNextUsedPos(struct JoyConnectPool *cp, int pos);
+int joynetGetNodeNum(struct JoyConnectPool *cp);
+int joynetTraverseNode(struct JoyConnectPool *cp, JoyNodeCallBack callback);
+JoyRecvCallBack joynetGetMsgCallBackFunc(struct JoyConnectPool *cp, enum JoynetMsgType type);
 
 
 #ifdef __cplusplus

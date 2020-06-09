@@ -1,6 +1,17 @@
 #include "joynet.h"
 #include "mempool.h"
 
+int joynetClose(int fd)
+{
+    if (0 != close(fd)) {
+        debug_msg("error: fail to close fd[%d], errno[%s]", fd, strerror(errno));
+        return -1;
+    }
+    debug_msg("debug: close fd[%d].", fd);
+
+    return 0;
+}
+
 int joynetSetNoBlocking(int fd)
 {
     int flags;
@@ -8,11 +19,13 @@ int joynetSetNoBlocking(int fd)
         debug_msg("error: fail to fcntl(F_GETFL).");
         return -1;
     }
+
     flags |= O_NONBLOCK;
     if (fcntl(fd, F_SETFL, flags) == -1) {
         debug_msg("error: fail to fcntl(F_SETFL).");
         return -1;
     }
+
     return 0;
 }
 
@@ -23,6 +36,7 @@ int joynetSetTcpNoDelay(int fd)
         debug_msg("error: fail to setsockopt(TCP_NODELAY), errno[%s].", strerror(errno));
         return -1;
     }
+
     return 0;
 }
 
@@ -33,6 +47,7 @@ int joynetSetTcpKeepAlive(int fd)
         debug_msg("error: fail to setsockopt(SO_KEEPALIVE), errno[%s].", strerror(errno));
         return -1;
     }
+
     return 0;
 }
 
@@ -43,6 +58,7 @@ int joynetSetAddrReuse(int fd)
         debug_msg("error: fail to setsockopt(SO_REUSEADDR), errno[%s].", strerror(errno));
         return -1;
     }
+
     return 0;
 }
 
@@ -62,6 +78,7 @@ int joynetSend(int fd, const char *buf, int len, int to)
         debug_msg("invalid param, buf[%p], len[%d].", buf, len);
         return -1;
     }
+
     int slen = send(fd, buf, len, to);
     if (slen < 0) {
         /*
@@ -77,6 +94,7 @@ int joynetSend(int fd, const char *buf, int len, int to)
         debug_msg("error: connect already closed.");
         return -1;
     }
+
     return slen;
 }
 
@@ -86,6 +104,7 @@ int joynetRecv(int fd, char *buf, int len, int to)
         debug_msg("invalid param, buf[%p], len[%d].", buf, len);
         return -1;
     }
+
     int rlen = recv(fd, buf, len, to);
     if (rlen < 0) {
         /*
@@ -102,6 +121,7 @@ int joynetRecv(int fd, char *buf, int len, int to)
         debug_msg("error: connect already closed.");
         return -1;
     }
+
     return rlen;
 }
 
@@ -136,6 +156,7 @@ int joynetRecvBuf(struct JoyConnectNode* node)
     } else {
         return joyBlockRecvData(node->cfd, node->procid);
     }
+
     return 0;
 }
 
@@ -175,20 +196,21 @@ int joynetMakePkgHead(struct JoynetHead *pkghead, const char *buf, int len, int 
         debug_msg("error: invalid param, pkghead[%p], buf[%p], len[%d]", pkghead, buf, len);
         return -1;
     }
+
     pkghead->headlen = sizeof(*pkghead);
     pkghead->bodylen = len;
     pkghead->srcid = srcid;
     pkghead->dstid = dstid;
     pkghead->dstnid = dstnid;
     pkghead->md5 = 0;
-    // debug_msg("pkghead, head len[%d], body len[%d]", pkghead->headlen, pkghead->bodylen);
+
     return 0;
 }
 
 struct JoyConnectNode *joynetGetConnectNodeByPos(struct JoyConnectPool *cp, int pos)
 {
     if (NULL == cp) {
-        debug_msg("error: invalid param cp[%p].\n", cp);
+        debug_msg("error: invalid param cp[%p].", cp);
         return NULL;
     }
 
@@ -204,7 +226,7 @@ struct JoyConnectNode *joynetGetConnectNodeByPos(struct JoyConnectPool *cp, int 
 struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int cfd)
 {
     if (NULL == cp) {
-        debug_msg("error: invalid param cp[%p].\n", cp);
+        debug_msg("error: invalid param cp[%p].", cp);
         return NULL;
     }
 
@@ -227,7 +249,7 @@ struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int c
 struct JoyConnectNode *joynetGetConnectNodeByID(struct JoyConnectPool *cp, int id)
 {
     if (NULL == cp || id < 0 || kJoynetMaxProcID <= id) {
-        debug_msg("error: invalid param, cp[%p], id[%d].\n", cp, id);
+        debug_msg("error: invalid param, cp[%p], id[%d].", cp, id);
         return NULL;
     }
 
@@ -239,47 +261,28 @@ struct JoyConnectNode *joynetGetConnectNodeByID(struct JoyConnectPool *cp, int i
     return joynetGetConnectNodeByPos(cp, cp->nodeidx[id]);
 }
 
-int joynetReleaseConnectNode(struct JoyConnectPool *cp, int cfd)
+int joynetReleaseConnectNode(struct JoyConnectPool *cp, struct JoyConnectNode *node)
 {
-    if (NULL == cp) {
-        debug_msg("error: invalid param cp[%p].\n", cp);
+    if (NULL == cp || NULL == node) {
+        debug_msg("error: invalid param, cp[%p], node[%p].", cp, node);
         return -1;
     }
 
-    struct JoyConnectNode *delnode = NULL;
-    int tmppos = memPoolGetFristUsedPos(cp);
-    while(0 <= tmppos) {
-        struct JoyConnectNode *node = joynetGetConnectNodeByPos(cp, tmppos);
-        if (NULL == node) {
-            debug_msg("error: fail to get node, pos[%d]", tmppos);
-            return -1;
-        }
-        if (cfd == node->cfd) {
-            delnode = node;
-            break;
-        }
-        tmppos = memPoolGetNextUesdPos(cp, tmppos);
-    }
+    joynetClose(node->cfd);
 
-    if (NULL == delnode) {
-        debug_msg("error: fail to get node, cfd[%d]", cfd);
-        return -1;
+    if (0 < node->procid) {
+        joyBlockReleaseBlockChain(node->procid);
     }
-
-    memPoolReleaseBlock(cp, tmppos);
-
-    if (0 < delnode->procid) {
-        joyBlockReleaseBlockChain(delnode->procid);
-    }
-    cp->nodeidx[delnode->procid] = -1;
+    memPoolReleaseBlock(cp, node->pos);
+    cp->nodeidx[node->procid] = -1;
 
     return 0;
 }
 
-struct JoyConnectNode *joynetAllocConnectNode(struct JoyConnectPool *cp, int cfd, int *pos)
+struct JoyConnectNode *joynetAllocConnectNode(struct JoyConnectPool *cp, int cfd)
 {
     if (NULL == cp) {
-        debug_msg("error: invalid param cp[%p].\n", cp);
+        debug_msg("error: invalid param cp[%p].", cp);
         return NULL;
     }
 
@@ -303,16 +306,14 @@ struct JoyConnectNode *joynetAllocConnectNode(struct JoyConnectPool *cp, int cfd
     time_t tick;
     time(&tick);
     bzero(node, sizeof(struct JoyConnectNode));
+    node->pos = allocpos;
     node->cfd = cfd;
     node->createtick = tick;
-    if (NULL != pos) {
-        *pos = allocpos;
-    }
 
     return node;
 }
 
-int joynetInit(struct JoyConnectPool **cp, struct JoyBlockConfig conf, int nodeNum)
+int joynetInit(struct JoyConnectPool **cp, JoyRecvCallBack *cmap, struct JoyBlockConfig conf, int nodeNum)
 {
     if (NULL == cp || nodeNum <= 0) {
         debug_msg("error: invalid param, cp[%p], nodeNum[%d]", cp, nodeNum);
@@ -329,6 +330,7 @@ int joynetInit(struct JoyConnectPool **cp, struct JoyBlockConfig conf, int nodeN
 
     *cp = (struct JoyConnectPool *)(memPoolGetHead(poolbase));
     memset((*cp)->nodeidx, -1, sizeof((*cp)->nodeidx));
+    memcpy((*cp)->cmap, cmap, sizeof((*cp)->cmap));
 
     return joyBlockInit(conf);
 }
@@ -345,4 +347,55 @@ int joynetGetNextUsedPos(struct JoyConnectPool *cp, int pos)
     }
 
     return memPoolGetNextUesdPos(cp, pos);
+}
+
+int joynetGetNodeNum(struct JoyConnectPool *cp)
+{
+    if (NULL == cp) {
+        debug_msg("error: invalid cp[%p]", cp);
+        return -1;
+    }
+
+    return memPoolGetUsedNum(cp);
+}
+
+int joynetTraverseNode(struct JoyConnectPool *cp, JoyNodeCallBack callback)
+{
+    int tmppos = joynetGetNextUsedPos(cp, -1);
+    int nodeNum = memPoolGetBlockNum(cp);
+    int count = 0;
+
+    while(0 <= tmppos) {
+        struct JoyConnectNode *node = joynetGetConnectNodeByPos(cp, tmppos);
+        if (NULL == node) {
+            debug_msg("error: fail to get node, pos[%d]", tmppos);
+            return -1;
+        }
+        tmppos = joynetGetNextUsedPos(cp, tmppos);
+        callback(node);
+
+        // 保护逻辑
+        count++;
+        if (count > nodeNum) {
+            debug_msg("error: Infinite loop.");
+            break;
+        }
+    }
+
+    return 0;
+}
+
+JoyRecvCallBack joynetGetMsgCallBackFunc(struct JoyConnectPool *cp, enum JoynetMsgType type)
+{
+    if (NULL == cp) {
+        debug_msg("error: invalid cp[%p]", cp);
+        return NULL;
+    }
+
+    if (type < kJoynetMsgTypeMsg || kJoynetMsgTypeMax <= type) {
+        debug_msg("error: invalid msg type[%d]", type);
+        return NULL;
+    }
+
+    return cp->cmap[type];
 }
