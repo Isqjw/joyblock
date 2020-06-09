@@ -362,9 +362,6 @@ int joynetGetNodeNum(struct JoyConnectPool *cp)
 int joynetTraverseNode(struct JoyConnectPool *cp, JoyNodeCallBack callback)
 {
     int tmppos = joynetGetNextUsedPos(cp, -1);
-    int nodeNum = memPoolGetBlockNum(cp);
-    int count = 0;
-
     while(0 <= tmppos) {
         struct JoyConnectNode *node = joynetGetConnectNodeByPos(cp, tmppos);
         if (NULL == node) {
@@ -373,13 +370,6 @@ int joynetTraverseNode(struct JoyConnectPool *cp, JoyNodeCallBack callback)
         }
         tmppos = joynetGetNextUsedPos(cp, tmppos);
         callback(node);
-
-        // 保护逻辑
-        count++;
-        if (count > nodeNum) {
-            debug_msg("error: Infinite loop.");
-            break;
-        }
     }
 
     return 0;
