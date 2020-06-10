@@ -109,7 +109,7 @@ static int joyClientStop_(struct JoyConnectNode *node)
     return 0;
 }
 
-int joyClientInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf, char *initbuf, int len, int nodeNum)
+int joyClientInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf, char *initbuf, int len, int nodeNum, int shmkey)
 {
     if (NULL == cmap || NULL == initbuf || len < 0) {
         debug_msg("error: invalid param, cmap[%p], initbuf[%p], len[%d]", cmap, initbuf, len);
@@ -118,7 +118,7 @@ int joyClientInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf, char *initb
     joyClient.shakeDataLen = len;
     memcpy(joyClient.shakeData, initbuf, len);
 
-    return joynetInit(&joyClient.cpool, cmap, conf, nodeNum);
+    return joynetInit(&joyClient.cpool, cmap, conf, nodeNum, shmkey);
 }
 
 int joyClientCloseTcp(int routerid)
@@ -574,7 +574,7 @@ int main()
         /*kJoynetMsgTypeShake*/ NULL,
         /*kJoynetMsgTypeStop*/  NULL,
     };
-    joynetInit(&joyClient.cpool, cmap, cfg, 512);
+    joynetInit(&joyClient.cpool, cmap, cfg, 512, 2);
 
     time_t tick, now;
     time(&tick);

@@ -49,7 +49,7 @@ struct JoyBlockMem {
 extern "C" {
 #endif
 
-int joyBlockInit(struct JoyBlockConfig cfg);
+int joyBlockInit(struct JoyBlockConfig cfg, int shmkey);
 int joyBlockWriteSendPkg(int procid, struct JoyBlockRWBuf *wbuf);
 int joyBlockReadRecvPkg(int procid, struct JoyBlockRWBuf *rbuf);
 int joyBlockReleaseRecvBuf(int procid, struct JoyBlockRWBuf *rbuf);

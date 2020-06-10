@@ -3,6 +3,8 @@
 #include "mempool.h"
 
 #include <stddef.h>
+#include <sys/ipc.h>
+#include <sys/shm.h>
 
 
 static struct JoyBlockMem *g_blockmem = NULL;
@@ -309,7 +311,28 @@ static int joyBlockReleaseReadBuf_(int *head, struct JoyBlockRWBuf *rbuf)
     return 0;
 }
 
-int joyBlockInit(struct JoyBlockConfig cfg)
+static void *joyBlockAttachShm_(int shmkey, size_t msize)
+{
+    int shmid = shmget(shmkey, msize, 0644);
+    if (shmid < 0) {
+        debug_msg("warn: shmget fail, shmkey[%d], size[%ld], errno[%s]", shmkey, msize, strerror(errno));
+        shmid = shmget(shmkey, msize, IPC_CREAT | 0664);
+        if (shmid < 0) {
+            debug_msg("warn: shmget create fail, shmkey[%d], size[%ld], errno[%s]", shmkey, msize, strerror(errno));
+            return NULL;
+        }
+    }
+
+    void *poolbase = shmat(shmid, NULL, 0);
+    if ((void *)-1 == poolbase) {
+        debug_msg("error: shmat fail, shmid[%d], errno[%s]", shmid, strerror(errno));
+        return NULL;
+    }
+
+    return poolbase;
+}
+
+int joyBlockInit(struct JoyBlockConfig cfg, int shmkey)
 {
     if (cfg.blockNum <= 0 || cfg.blockSize <= 0 || cfg.blockChainLen <= 0 ) {
         debug_msg("error: invalid block cfg value, num[%d], size[%d], \
@@ -323,7 +346,9 @@ int joyBlockInit(struct JoyBlockConfig cfg)
         return -1;
     }
 
-    void *poolbase = malloc(msize);
+
+    /* void *poolbase = malloc(msize); */
+    void *poolbase = joyBlockAttachShm_(shmkey, msize);
     if (NULL == poolbase) {
         debug_msg("error: fail to malloc pool.");
         return -1;

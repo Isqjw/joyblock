@@ -313,7 +313,7 @@ struct JoyConnectNode *joynetAllocConnectNode(struct JoyConnectPool *cp, int cfd
     return node;
 }
 
-int joynetInit(struct JoyConnectPool **cp, JoyRecvCallBack *cmap, struct JoyBlockConfig conf, int nodeNum)
+int joynetInit(struct JoyConnectPool **cp, JoyRecvCallBack *cmap, struct JoyBlockConfig conf, int nodeNum, int shmkey)
 {
     if (NULL == cp || nodeNum <= 0) {
         debug_msg("error: invalid param, cp[%p], nodeNum[%d]", cp, nodeNum);
@@ -332,7 +332,7 @@ int joynetInit(struct JoyConnectPool **cp, JoyRecvCallBack *cmap, struct JoyBloc
     memset((*cp)->nodeidx, -1, sizeof((*cp)->nodeidx));
     memcpy((*cp)->cmap, cmap, sizeof((*cp)->cmap));
 
-    return joyBlockInit(conf);
+    return joyBlockInit(conf, shmkey);
 }
 
 int joynetGetNextUsedPos(struct JoyConnectPool *cp, int pos)

@@ -31,15 +31,15 @@ static int joyServerCloseTcp_(struct JoyConnectNode *node)
     return 0;
 }
 
-int joyServerInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf)
+int joyServerInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf, int shmkey)
 {
     // memset(&joyServer.nid, -1, sizeof(joyServer.nid));
-    return joynetInit(&joyServer.cpool, cmap, conf, kEpollMaxFDs);
+    return joynetInit(&joyServer.cpool, cmap, conf, kEpollMaxFDs, shmkey);
 }
 
-int joyServerCloseTcp()
+int joyServerStopListen()
 {
-    joynetTraverseNode(joyServer.cpool, joyServerCloseTcp_);
+    joynetClose(joyServer.lfd);
 
     return 0;
 }
@@ -152,7 +152,8 @@ int joyServerProcRecvData()
             return 0;
         } else {
             // close all fd
-            joyServerCloseTcp();
+            joyServerStopListen();
+            joynetTraverseNode(joyServer.cpool, joyServerCloseTcp_);
             debug_msg("error: errno[%s] when epoll.", strerror(errno));
             return -1;
         }
@@ -495,7 +496,7 @@ int main()
         /*kJoynetMsgTypeShake*/ NULL,
         /*kJoynetMsgTypeStop*/  NULL,
     };
-    joyServerInit(cmap, cfg);
+    joyServerInit(cmap, cfg, 1);
 
     if (0 != joyServerListen("0.0.0.0", 20000)) {
         return -1;

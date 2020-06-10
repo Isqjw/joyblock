@@ -88,7 +88,7 @@ int joynetMakePkgHead(struct JoynetHead *pkghead, const char *buf, int len, int 
 
 
 //节点
-int joynetInit(struct JoyConnectPool **cp, JoyRecvCallBack *cmap, struct JoyBlockConfig conf, int nodeNum);
+int joynetInit(struct JoyConnectPool **cp, JoyRecvCallBack *cmap, struct JoyBlockConfig conf, int nodeNum, int shmkey);
 struct JoyConnectNode *joynetGetConnectNodeByPos(struct JoyConnectPool *cp, int pos);
 struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int cfd);
 struct JoyConnectNode *joynetGetConnectNodeByID(struct JoyConnectPool *cp, int id);

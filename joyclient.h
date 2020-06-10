@@ -21,7 +21,7 @@ struct JoyClient {
 extern "C" {
 #endif
 
-int joyClientInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf, char *initbuf, int len, int nodeNum);
+int joyClientInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf, char *initbuf, int len, int nodeNum, int shmkey);
 int joyClientTick();
 int joyClientConnectTcp(const char *addr, int port, int procid, int routerid);
 int joyClientIsReady(int routerid);

@@ -23,10 +23,10 @@ struct JoyServer {
 extern "C" {
 #endif
 
-int joyServerInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf);
+int joyServerInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf, int shmkey);
 int joyServerStop();
 int joyServerListen(const char *addr, int port);
-int joyServerCloseTcp();
+int joyServerStopListen();
 int joyServerProcRecvData();
 int joyServerReadRecvData();
 int joyServerProcSendData();
