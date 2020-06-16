@@ -305,8 +305,9 @@ int joyClientProcRecvData()
         }
         tmppos = joynetGetNextUsedPos(joyClient.cpool, tmppos);
 
-        if (0 == node->cfd) {
-            return 0;
+        if (kJoynetStatusConnected != node->status
+                && kJoynetStatusShakeHand != node->status) {
+            continue;
         }
 
         struct pollfd pfds[1];
@@ -553,15 +554,15 @@ static int clientRecvCallBack(char *buf, struct JoynetHead *pkghead)
         return -1;
     }
     totalrecvlen += pkghead->bodylen;
-    debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \
-        pkghead->msgtype, pkghead->headlen, pkghead->bodylen, pkghead->srcid, pkghead->dstid, pkghead->md5);
+    /* debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \
+        pkghead->msgtype, pkghead->headlen, pkghead->bodylen, pkghead->srcid, pkghead->dstid, pkghead->md5); */
     /*joyClientWriteSendData(buf, pkghead->bodylen, pkghead->dstid, pkghead->srcid, 0);*/
     return 0;
 }
 
 int main()
 {
-    struct JoyBlockConfig cfg = { 1024, 100, 15 };
+    struct JoyBlockConfig cfg = { 1024, 1000, 15 };
     JoyRecvCallBack cmap[kJoynetMsgTypeMax] = {
         /*kJoynetMsgTypeMsg*/   clientRecvCallBack,
         /*kJoynetMsgTypeShake*/ NULL,
@@ -573,17 +574,21 @@ int main()
     time(&tick);
     const char *test = "1234567890qwertyuioplkjhgfdsazxcvbnm,.;?";
     long int totallen = 0;
-    int nodecnt = 8;
-    int pkgcnt = 4;
+    int nodecnt = 512;
+    int pkgcnt = 10;
     const char *ip = "192.168.1.185";
     int port = 20000;
+
     for (int i = 0; i < nodecnt; ++i) {
         joyClientConnectTcp(ip, port, i + 1, i + 1);
     }
 
     while (1) {
-        time(&now);
-        tick = now;
+        /* time(&now);
+        if (now < tick + 1) {
+            continue;
+        }
+        tick = now; */
         char allready = 1;
         for (int i = 0; i < nodecnt; ++i) {
             struct JoyConnectNode *node = joynetGetConnectNodeByID(joyClient.cpool, i + 1);

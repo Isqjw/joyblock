@@ -482,7 +482,7 @@ static int serverRecvCallBack(char *buf, struct JoynetHead *pkghead)
 
 int main()
 {
-    struct JoyBlockConfig cfg = { 128, 100, 15 };
+    struct JoyBlockConfig cfg = { 1024, 1000, 15 };
     JoyRecvCallBack cmap[kJoynetMsgTypeMax] = {
         /*kJoynetMsgTypeMsg*/   serverRecvCallBack,
         /*kJoynetMsgTypeShake*/ NULL,

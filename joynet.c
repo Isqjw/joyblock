@@ -204,12 +204,7 @@ int joynetRecvBuf(struct JoyConnectNode* node)
             break;
         }
 
-        if (kJoynetStatusShakeHand == node->status) {
-            if (kJoynetMsgTypeShake != pkghead->msgtype) {
-                debug_msg("error: invalid msg type[%d], node status[%d]", pkghead->msgtype, node->status);
-                return -1;
-            }
-
+        if (kJoynetMsgTypeShake == pkghead->msgtype) {
             if (0 != node->shakelen) {
                 debug_msg("error: shake hand buf not empty, len[%d]", node->shakelen);
                 return -1;
@@ -487,14 +482,14 @@ int joynetSetNodeProcid(struct JoyConnectPool *cp, struct JoyConnectNode *node, 
         return 0;
     }
 
-    if (kJoynetStatusStop != oldNode->status) {
+    if (kJoynetStatusStop != oldNode->status && kJoynetStatusClosed != oldNode->status) {
         debug_msg("error: same procid node already exist, procid[%d]", procid);
         return -1;
     }
 
     node->procid = procid;
     cp->nodeidx[procid] = node->pos;
-    memPoolReleaseBlock(cp, node->pos);
+    memPoolReleaseBlock(cp, oldNode->pos);
 
     return 0;
 }

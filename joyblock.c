@@ -77,7 +77,7 @@ static int JoyBlockTraverseChain_(int head, int *tailpos, int *chainlen)
 
     int curpos = head;
     int nextpos = head;
-    int count = 1;
+    int count = 0;
 
     while(0 <= nextpos) {
         struct JoyBlock *tmpblock = joyBlockGetBlockByPos_(nextpos);
