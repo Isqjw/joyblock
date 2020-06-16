@@ -553,8 +553,8 @@ static int clientRecvCallBack(char *buf, struct JoynetHead *pkghead)
         return -1;
     }
     totalrecvlen += pkghead->bodylen;
-    /* debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \ */
-        /* pkghead->msgtype, pkghead->headlen, pkghead->bodylen, pkghead->srcid, pkghead->dstid, pkghead->md5); */
+    debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \
+        pkghead->msgtype, pkghead->headlen, pkghead->bodylen, pkghead->srcid, pkghead->dstid, pkghead->md5);
     /*joyClientWriteSendData(buf, pkghead->bodylen, pkghead->dstid, pkghead->srcid, 0);*/
     return 0;
 }
@@ -573,10 +573,8 @@ int main()
     time(&tick);
     const char *test = "1234567890qwertyuioplkjhgfdsazxcvbnm,.;?";
     long int totallen = 0;
-    int nodecnt = 512;
-    int pkgcnt = 10;
-    /* int nodecnt = 1;
-    int pkgcnt = 2; */
+    int nodecnt = 8;
+    int pkgcnt = 4;
     const char *ip = "192.168.1.185";
     int port = 20000;
     for (int i = 0; i < nodecnt; ++i) {
@@ -616,6 +614,7 @@ int main()
 
     while(1){
         joyClientProcSendData();
+        joyClientProcRecvData();
         joyClientReadRecvData();
         time(&now);
         if (tick + 10 < now) {

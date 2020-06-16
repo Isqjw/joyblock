@@ -29,7 +29,7 @@ int joyServerProcRecvData();
 int joyServerReadRecvData();
 int joyServerProcSendData();
 int joyServerWriteSendData(const char *buf, int len, int procid, int srcid, int dstid);
-int joyServerGetNodeNum();
+int joyServerCanStop();
 
 #ifdef __cplusplus
 }

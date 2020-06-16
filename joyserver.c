@@ -439,9 +439,23 @@ int joyServerWriteSendData(const char *buf, int len, int procid, int srcid, int 
     return 0;
 }
 
-int joyServerGetNodeNum()
+int joyServerCanStop()
 {
-    return joynetGetNodeNum(joyServer.cpool);
+    int tmppos = joynetGetNextUsedPos(joyServer.cpool, -1);
+    while(0 <= tmppos) {
+        struct JoyConnectNode *node = joynetGetConnectNodeByPos(joyServer.cpool, tmppos);
+        if (NULL == node) {
+            debug_msg("error: fail to get node, pos[%d]", tmppos);
+            return -1;
+        }
+        tmppos = joynetGetNextUsedPos(joyServer.cpool, tmppos);
+
+        if (kJoynetStatusStop != node->status && kJoynetStatusClosed != node->status) {
+            return 0;
+        }
+    }
+
+    return 1;
 }
 
 
@@ -458,7 +472,7 @@ static int serverRecvCallBack(char *buf, struct JoynetHead *pkghead)
     totalrecvlen += pkghead->bodylen;
     /* debug_msg("recv head, msgtype[%d], headlen[%d], bodylen[%d], srcid[%d], dstid[%d], md5[%d].", \ */
         /* pkghead->msgtype, pkghead->headlen, pkghead->bodylen, pkghead->srcid, pkghead->dstid, pkghead->md5); */
-    int rv = joyServerWriteSendData(buf, pkghead->bodylen, 1, pkghead->dstid, pkghead->srcid);
+    int rv = joyServerWriteSendData(buf, pkghead->bodylen, pkghead->srcid, pkghead->dstid, pkghead->srcid);
     if (rv < 0) {
         loselen += pkghead->bodylen;
     }
