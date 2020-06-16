@@ -185,16 +185,15 @@ int joynetRecvBuf(struct JoyConnectNode* node)
     }
 
     int leftroom = kMaxProtoPackBufSize - node->recvlen;
-    if (leftroom <= 0) {
-        return 0;
+    int rlen = 0;
+    if (0 < leftroom) {
+        rlen = joynetRecv(node->cfd, node->recvbuf + node->recvlen, leftroom, 0);
+        if (rlen < 0) {
+            debug_msg("error: fail to recv buf.");
+            return -1;
+        }
+        node->recvlen += rlen;
     }
-
-    int rlen = joynetRecv(node->cfd, node->recvbuf + node->recvlen, leftroom, 0);
-    if (rlen < 0) {
-        debug_msg("error: fail to recv buf.");
-        return -1;
-    }
-    node->recvlen += rlen;
 
     int curpos = 0;
     int pkgHeadSize = sizeof(struct JoynetHead);
@@ -269,24 +268,24 @@ int joynetWriteSendPkg(int procid, struct JoynetRWBuf *wbuf)
     return joyBlockWriteSendPkg(procid, wbuf);
 }
 
-int joynetReadRecvPkg(struct JoyConnectNode *node, struct JoynetRWBuf *rbuf)
+int joynetReadRecvPkg(int procid, struct JoynetRWBuf *rbuf)
 {
-    if (NULL == node || NULL == rbuf) {
-        debug_msg("error: invalid param, node[%p], rbuf[%p].", node, rbuf);
+    if (procid < 0 || kJoynetMaxProcID <= procid || NULL == rbuf) {
+        debug_msg("error: invalid param, procid[%d], rbuf[%p].", procid, rbuf);
         return -1;
     }
 
-    return joyBlockReadRecvPkg(node->procid, rbuf);
+    return joyBlockReadRecvPkg(procid, rbuf);
 }
 
-int joynetReleaseRecvBuf(struct JoyConnectNode *node, struct JoynetRWBuf *rbuf)
+int joynetReleaseRecvBuf(int procid, struct JoynetRWBuf *rbuf)
 {
-    if (NULL == node || NULL == rbuf) {
-        debug_msg("error: invalid param, node[%p], rbuf[%p].", node, rbuf);
+    if (procid < 0 || kJoynetMaxProcID <= procid || NULL == rbuf) {
+        debug_msg("error: invalid param, procid[%d], rbuf[%p].", procid, rbuf);
         return -1;
     }
 
-    return joyBlockReleaseRecvBuf(node->procid, rbuf);
+    return joyBlockReleaseRecvBuf(procid, rbuf);
 }
 
 int joynetMakePkgHead(struct JoynetHead *pkghead, const char *buf, int len, int srcid, int dstid, int dstnid)
@@ -322,7 +321,7 @@ struct JoyConnectNode *joynetGetConnectNodeByPos(struct JoyConnectPool *cp, int 
     return node;
 }
 
-struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int cfd)
+/* struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int cfd)
 {
     if (NULL == cp) {
         debug_msg("error: invalid param cp[%p].", cp);
@@ -343,7 +342,7 @@ struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int c
     }
 
     return NULL;
-}
+} */
 
 struct JoyConnectNode *joynetGetConnectNodeByID(struct JoyConnectPool *cp, int id)
 {
@@ -375,6 +374,7 @@ int joynetCloseConnectNode(struct JoyConnectPool *cp, struct JoyConnectNode *nod
         free(node->shakebuf);
         node->shakebuf = NULL;
     }
+    node->shakelen = 0;
 
     if (NULL != node->recvbuf) {
         free(node->recvbuf);
@@ -406,11 +406,11 @@ struct JoyConnectNode *joynetAllocConnectNode(struct JoyConnectPool *cp, int cfd
         return NULL;
     }
 
-    struct JoyConnectNode *tmpnode = joynetGetConnectNodeByFD(cp, cfd);
+    /* struct JoyConnectNode *tmpnode = joynetGetConnectNodeByFD(cp, cfd);
     if (NULL != tmpnode) {
         debug_msg("error: node already exist.");
         return NULL;;
-    }
+    } */
 
     int allocpos = memPoolAllocBlock(cp);
     if (allocpos < 0) {

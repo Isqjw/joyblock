@@ -389,7 +389,7 @@ static int joyClientHandleMsg_(struct JoyConnectNode *node)
     while (1) {
         struct JoynetRWBuf rbuf;
         memset(&rbuf, 0, sizeof(rbuf));
-        int rlen = joynetReadRecvPkg(node, &rbuf);
+        int rlen = joynetReadRecvPkg(node->procid, &rbuf);
         if (0 == rlen) {
             break;
         } else if (rlen < 0) {
@@ -418,13 +418,13 @@ static int joyClientHandleMsg_(struct JoyConnectNode *node)
                     if (NULL != callback) {
                         callback(buf + pkghead->headlen, pkghead);
                     }
-                    joynetReleaseRecvBuf(node, &rbuf);
+                    joynetReleaseRecvBuf(node->procid, &rbuf);
                     break;
                 }
             case kJoynetMsgTypeStop:
                 {
                     joyClientStop_(node);
-                    joynetReleaseRecvBuf(node, &rbuf);
+                    joynetReleaseRecvBuf(node->procid, &rbuf);
                     break;
                 }
             default:

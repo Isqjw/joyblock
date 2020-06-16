@@ -12,7 +12,7 @@
 
 struct JoyServer {
     int efd;                                //epoll fd
-    int lfd;                                //监听fd
+    struct JoyConnectNode lnode;            //listen node
     // int nid[kJoyServerMaxNid];              //nid索引
     struct JoyConnectPool *cpool;           //连接池
 };

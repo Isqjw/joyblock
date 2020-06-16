@@ -83,8 +83,8 @@ int joynetWriteSendPkg(int procid, struct JoynetRWBuf *wbuf);
 
 int joynetRecv(int fd, char *buf, int len, int to);
 int joynetRecvBuf(struct JoyConnectNode* node);
-int joynetReadRecvPkg(struct JoyConnectNode *node, struct JoynetRWBuf *rbuf);
-int joynetReleaseRecvBuf(struct JoyConnectNode *node, struct JoynetRWBuf *rbuf);
+int joynetReadRecvPkg(int procid, struct JoynetRWBuf *rbuf);
+int joynetReleaseRecvBuf(int procid, struct JoynetRWBuf *rbuf);
 
 int joynetMakePkgHead(struct JoynetHead *pkghead, const char *buf, int len, int srcid, int dstid, int dstnid);
 
@@ -93,7 +93,7 @@ int joynetMakePkgHead(struct JoynetHead *pkghead, const char *buf, int len, int 
 int joynetInit(struct JoyConnectPool **cp, JoyRecvCallBack *cmap, struct JoyBlockConfig conf, int nodeNum, int shmkey);
 int joynetSetNodeProcid(struct JoyConnectPool *cp, struct JoyConnectNode *node, int procid);
 struct JoyConnectNode *joynetGetConnectNodeByPos(struct JoyConnectPool *cp, int pos);
-struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int cfd);
+// struct JoyConnectNode *joynetGetConnectNodeByFD(struct JoyConnectPool *cp, int cfd);
 struct JoyConnectNode *joynetGetConnectNodeByID(struct JoyConnectPool *cp, int id);
 
 int joynetCloseConnectNode(struct JoyConnectPool *cp, struct JoyConnectNode *node);
