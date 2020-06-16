@@ -614,7 +614,6 @@ int main()
 
     while(1){
         joyClientProcSendData();
-        joyClientProcRecvData();
         joyClientReadRecvData();
         time(&now);
         if (tick + 10 < now) {
