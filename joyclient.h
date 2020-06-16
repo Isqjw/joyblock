@@ -3,8 +3,6 @@
 
 #include "joynet.h"
 
-#include <poll.h>
-
 #define kJoyClientPollTimeOut 0
 #define kJoyClientConnectTimeOut 10
 #define kJoyClientSendBufSize 10 * 1024 * 1024   //10MB发送缓存
@@ -13,7 +11,7 @@
 
 struct JoyClient {
     int shakeDataLen;                        //握手数据长度
-    char shakeData[kJoynetShakeBufSize];     //握手数据
+    char *shakeData;                         //握手数据
     struct JoyConnectPool *cpool;            //连接池
 };
 
@@ -21,7 +19,9 @@ struct JoyClient {
 extern "C" {
 #endif
 
+// 不要重复调用init，导致内存泄漏
 int joyClientInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf, char *initbuf, int len, int nodeNum, int shmkey);
+
 int joyClientTick();
 int joyClientConnectTcp(const char *addr, int port, int procid, int routerid);
 int joyClientIsReady(int routerid);

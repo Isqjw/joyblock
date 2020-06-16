@@ -1,10 +1,13 @@
 #include "joyblock.h"
-#include "joynet.h"
+#include "debug.h"
 #include "mempool.h"
+//#include "joynet.h"
 
+#include <stdlib.h>
 #include <stddef.h>
 #include <sys/ipc.h>
 #include <sys/shm.h>
+#include <errno.h>
 
 
 static struct JoyBlockMem *g_blockmem = NULL;
@@ -72,15 +75,10 @@ static int JoyBlockTraverseChain_(int head, int *tailpos, int *chainlen)
         return 0;
     }
 
-    struct JoyBlock *headBlock = joyBlockGetBlockByPos_(head);
-    if (NULL == headBlock) {
-        debug_msg("error: fail to get block by pos[%d].", head);
-        return -1;
-    }
     int curpos = head;
-    int nextpos = headBlock->nextUsedPos;
-
+    int nextpos = head;
     int count = 1;
+
     while(0 <= nextpos) {
         struct JoyBlock *tmpblock = joyBlockGetBlockByPos_(nextpos);
         if (NULL == tmpblock) {
@@ -98,7 +96,7 @@ static int JoyBlockTraverseChain_(int head, int *tailpos, int *chainlen)
     return 0;
 }
 
-static int joyBlockWritePkg_(int *head, struct JoyBlockRWBuf *wbuf)
+static int joyBlockWritePkg_(int *head, struct JoynetRWBuf *wbuf)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
@@ -184,7 +182,7 @@ static int joyBlockWritePkg_(int *head, struct JoyBlockRWBuf *wbuf)
     return totallen;
 }
 
-static int joyBlockReadPkg_(int head, struct JoyBlockRWBuf *rbuf)
+static int joyBlockReadPkg_(int head, struct JoynetRWBuf *rbuf)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
@@ -263,7 +261,7 @@ static int joyBlockReadPkg_(int head, struct JoyBlockRWBuf *rbuf)
     return pkgsize;
 }
 
-static int joyBlockReleaseReadBuf_(int *head, struct JoyBlockRWBuf *rbuf)
+static int joyBlockReleaseReadBuf_(int *head, struct JoynetRWBuf *rbuf)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
@@ -346,9 +344,8 @@ int joyBlockInit(struct JoyBlockConfig cfg, int shmkey)
         return -1;
     }
 
-
-    /* void *poolbase = malloc(msize); */
-    void *poolbase = joyBlockAttachShm_(shmkey, msize);
+    void *poolbase = malloc(msize);
+    /* void *poolbase = joyBlockAttachShm_(shmkey, msize); */
     if (NULL == poolbase) {
         debug_msg("error: fail to malloc pool.");
         return -1;
@@ -363,7 +360,7 @@ int joyBlockInit(struct JoyBlockConfig cfg, int shmkey)
     return 0;
 }
 
-int joyBlockWriteSendPkg(int procid, struct JoyBlockRWBuf *wbuf)
+int joyBlockWriteSendPkg(int procid, struct JoynetRWBuf *wbuf)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
@@ -381,7 +378,25 @@ int joyBlockWriteSendPkg(int procid, struct JoyBlockRWBuf *wbuf)
     return rv;
 }
 
-int joyBlockSendData(int fd, int procid)
+int joyBlockWriteRecvPkg(int procid, struct JoynetRWBuf *wbuf)
+{
+    if (NULL == g_blockmem) {
+        debug_msg("error: g_blockmem is NULL.");
+        return -1;
+    }
+
+    if (procid < 0 || kJoynetMaxProcID <= procid || NULL == wbuf) {
+        debug_msg("error: invalid param, procid[%d], wbuf[%p]", procid, wbuf);
+        return -1;
+    }
+
+    struct JoyBlockChain *blockChain = g_blockmem->blockChains + procid;
+    int rv = joyBlockWritePkg_(&blockChain->recvhead, wbuf);
+
+    return rv;
+}
+
+/* int joyBlockSendData(int fd, int procid)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
@@ -427,9 +442,9 @@ int joyBlockSendData(int fd, int procid)
     }
 
     return slen;
-}
+} */
 
-int joyBlockReadRecvPkg(int procid, struct JoyBlockRWBuf *rbuf)
+int joyBlockReadRecvPkg(int procid, struct JoynetRWBuf *rbuf)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
@@ -448,7 +463,26 @@ int joyBlockReadRecvPkg(int procid, struct JoyBlockRWBuf *rbuf)
     return rlen;
 }
 
-int joyBlockReleaseRecvBuf(int procid, struct JoyBlockRWBuf *rbuf)
+int joyBlockReadSendPkg(int procid, struct JoynetRWBuf *rbuf)
+{
+    if (NULL == g_blockmem) {
+        debug_msg("error: g_blockmem is NULL.");
+        return -1;
+    }
+
+    if (procid < 0 || kJoynetMaxProcID <= procid || NULL == rbuf) {
+        debug_msg("error: invalid param, procid[%d], rbuf[%p]", procid, rbuf);
+        return -1;
+    }
+
+    struct JoyBlockChain *blockChain = g_blockmem->blockChains + procid;
+
+    int rlen = joyBlockReadPkg_(blockChain->sendhead, rbuf);
+
+    return rlen;
+}
+
+int joyBlockReleaseRecvBuf(int procid, struct JoynetRWBuf *rbuf)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
@@ -465,7 +499,24 @@ int joyBlockReleaseRecvBuf(int procid, struct JoyBlockRWBuf *rbuf)
     return joyBlockReleaseReadBuf_(&blockChain->recvhead, rbuf);
 }
 
-int joyBlockRecvData(int fd, int procid)
+int joyBlockReleaseSendBuf(int procid, struct JoynetRWBuf *rbuf)
+{
+    if (NULL == g_blockmem) {
+        debug_msg("error: g_blockmem is NULL.");
+        return -1;
+    }
+
+    if (procid < 0 || kJoynetMaxProcID <= procid || NULL == rbuf) {
+        debug_msg("error: invalid param, procid[%d], rbuf[%p]", procid, rbuf);
+        return -1;
+    }
+
+    struct JoyBlockChain *blockChain = g_blockmem->blockChains + procid;
+
+    return joyBlockReleaseReadBuf_(&blockChain->sendhead, rbuf);
+}
+
+/* int joyBlockRecvData(int fd, int procid)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
@@ -549,7 +600,7 @@ int joyBlockRecvData(int fd, int procid)
     tailBlock->dataTail += rlen;
 
     return rlen;
-}
+} */
 
 int joyBlockReleaseBlockChain(int procid)
 {
@@ -589,6 +640,22 @@ int joyBlockReleaseBlockChain(int procid)
     return 0;
 }
 
+int joyBlockHaveData(int procid)
+{
+    if (NULL == g_blockmem) {
+        debug_msg("error: g_blockmem is NULL.");
+        return -1;
+    }
+
+    if (procid < 0 || kJoynetMaxProcID <= procid) {
+        debug_msg("error: invalid param, procid[%d]", procid);
+        return -1;
+    }
+
+    struct JoyBlockChain *blockChain = g_blockmem->blockChains + procid;
+
+    return (blockChain->sendhead < 0 && blockChain->recvhead < 0) ? 0 : 1;
+}
 
 /*
  * 保护逻辑:
@@ -687,7 +754,7 @@ int joyBlockMemCheck()
 
 
     for (int j = 0; j < 2; j++) {
-        struct JoyBlockRWBuf rbuf;
+        struct JoynetRWBuf rbuf;
         joyBlockReadPkg_(0, &rbuf);
         char *buf = (char *)alloca(rbuf.len[0] + rbuf.len[1]);
         if (0 < rbuf.len[0]) {

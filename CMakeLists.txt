@@ -9,6 +9,6 @@ SET(CMAKE_CXX_FLAGS_RELEASE "$ENV{CXXFLAGS} -O3 -Wall")
 #message(STATUS "source dir: ${CMAKE_SOURCE_DIR}")
 #message(STATUS "complie flags: ${STRICT_COMPILE_FLAGS}")
 
-add_executable(client joyclient.c joynet.c joyblock.c mempool.c)
-add_executable(server joyserver.c joynet.c joyblock.c mempool.c)
+add_executable(client joyclient.c joynet.c joyblock.c mempool.c cqueue.c)
+add_executable(server joyserver.c joynet.c joyblock.c mempool.c cqueue.c)
 # add_executable(pool mempool.c)

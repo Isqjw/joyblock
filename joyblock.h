@@ -1,11 +1,7 @@
 #ifndef __JOY_BLOCK_H
 #define __JOY_BLOCK_H
 
-#include "debug.h"
 #include "joyconst.h"
-
-#include <stdlib.h>
-
 
 struct JoyBlockConfig {
     int blockNum;       //block的数量
@@ -27,21 +23,11 @@ struct JoyBlockChain {
     int recvhead;   // block链表头
 };
 
-/*
- * 处理读取数据时, 数据在两个block的两头的情况
- * 绝大数情况都只用到第一个buf
- */
-struct JoyBlockRWBuf {
-    int len[2];
-    char *buf[2];
-};
-
 struct JoyBlockMem {
     // block链表索引(zoneid作为下标)
     int blockSize;
     int maxBlockChainLen;
     struct JoyBlockChain blockChains[kJoynetMaxProcID];
-
 };
 
 
@@ -50,13 +36,20 @@ extern "C" {
 #endif
 
 int joyBlockInit(struct JoyBlockConfig cfg, int shmkey);
-int joyBlockWriteSendPkg(int procid, struct JoyBlockRWBuf *wbuf);
-int joyBlockReadRecvPkg(int procid, struct JoyBlockRWBuf *rbuf);
-int joyBlockReleaseRecvBuf(int procid, struct JoyBlockRWBuf *rbuf);
-int joyBlockSendData(int fd, int procid);
-int joyBlockRecvData(int fd, int procid);
+
+int joyBlockWriteSendPkg(int procid, struct JoynetRWBuf *wbuf);
+int joyBlockWriteRecvPkg(int procid, struct JoynetRWBuf *wbuf);
+
+int joyBlockReadSendPkg(int procid, struct JoynetRWBuf *rbuf);
+int joyBlockReadRecvPkg(int procid, struct JoynetRWBuf *rbuf);
+
+int joyBlockReleaseSendBuf(int procid, struct JoynetRWBuf *rbuf);
+int joyBlockReleaseRecvBuf(int procid, struct JoynetRWBuf *rbuf);
+
+// int joyBlockSendData(int fd, int procid);
+// int joyBlockRecvData(int fd, int procid);
 int joyBlockReleaseBlockChain(int procid);
-// int joyBlockGetSendBufLeftRoom(int procid);
+int joyBlockHaveData(int procid);
 
 int joyBlockMemCheck();
 

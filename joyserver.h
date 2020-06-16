@@ -3,8 +3,6 @@
 
 #include "joynet.h"
 
-#include <sys/epoll.h>
-
 #define kJoyServerEpollTimeOut 5
 #define kJoyServerSendBufSize 1 * 1024 * 1024   //1MB发送缓存
 #define kJoyServerRecvBufSize 1 * 1024 * 1024   //1MB接受缓存

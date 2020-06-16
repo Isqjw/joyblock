@@ -2,14 +2,14 @@
 
 static char *memPoolGetPoolBase_(void *poolptr)
 {
-    return ((char *)poolptr - sizeof(struct MemPool));
+    return ((char *)poolptr - sizeof(struct MemPoolHead));
 }
 
-static char *memPoolGetBlokBase_(char *poolbase)
+static char *memPoolGetBlockBase_(char *poolbase)
 {
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
 
-    return poolbase + sizeof(struct MemPool) + pool->memPoolHeadSize;
+    return poolbase + sizeof(struct MemPoolHead) + pool->customPoolHeadSize;
 }
 
 static char *memPoolGetBlockByPos_(char *poolbase, int pos)
@@ -19,20 +19,20 @@ static char *memPoolGetBlockByPos_(char *poolbase, int pos)
         return NULL;
     }
 
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
     if (pos < 0 || pos >= pool->blockNum) {
         debug_msg("error: invalid pos[%d].", pos);
         return NULL;
     }
 
-    char *block = memPoolGetBlokBase_(poolbase);
+    char *block = memPoolGetBlockBase_(poolbase);
 
     return block + pos * pool->blockSize;
 }
 
-size_t memPoolCalSize(size_t memPoolHeadSize, size_t blockSize, int blockNum)
+size_t memPoolCalSize(size_t customPoolHeadSize, size_t blockSize, int blockNum)
 {
-    size_t poolsize = sizeof(struct MemPool) + memPoolHeadSize + (sizeof(struct MemBlock) + blockSize) * blockNum;
+    size_t poolsize = sizeof(struct MemPoolHead) + customPoolHeadSize + (sizeof(struct MemBlockHead) + blockSize) * blockNum;
 
     return poolsize;
 }
@@ -51,10 +51,10 @@ char *memPoolGetBlockByPos(void *poolptr, int pos)
         return NULL;
     }
 
-    return block + sizeof(struct MemBlock);
+    return block + sizeof(struct MemBlockHead);
 }
 
-int memPoolGetFristUsedPos(void *poolptr)
+int memPoolGetFirstUsedPos(void *poolptr)
 {
     if (NULL == poolptr) {
         debug_msg("error: invalid param, poolptr[%p]", poolptr);
@@ -62,7 +62,7 @@ int memPoolGetFristUsedPos(void *poolptr)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
     return pool->firstUsedPos;
 }
 
@@ -74,11 +74,11 @@ int memPoolGetLastUsedPos(void *poolptr)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
     return pool->lastUsedPos;
 }
 
-int memPoolGetNextUesdPos(void *poolptr, int pos)
+int memPoolGetNextUsedPos(void *poolptr, int pos)
 {
     if (NULL == poolptr) {
         debug_msg("error: invalid param, poolptr[%p]", poolptr);
@@ -86,7 +86,7 @@ int memPoolGetNextUesdPos(void *poolptr, int pos)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemBlock *block = (struct MemBlock *)memPoolGetBlockByPos_(poolbase, pos);
+    struct MemBlockHead *block = (struct MemBlockHead *)memPoolGetBlockByPos_(poolbase, pos);
     if (NULL == block){
         debug_msg("error: fail to get block by pos[%d]", pos);
         return -1;
@@ -95,7 +95,7 @@ int memPoolGetNextUesdPos(void *poolptr, int pos)
     return block->nextUsedPos;
 }
 
-int memPoolGetPreUesdPos(void *poolptr, int pos)
+int memPoolGetPrevUsedPos(void *poolptr, int pos)
 {
     if (NULL == poolptr) {
         debug_msg("error: invalid param, poolptr[%p]", poolptr);
@@ -103,13 +103,13 @@ int memPoolGetPreUesdPos(void *poolptr, int pos)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemBlock *block = (struct MemBlock *)memPoolGetBlockByPos_(poolbase, pos);
+    struct MemBlockHead *block = (struct MemBlockHead *)memPoolGetBlockByPos_(poolbase, pos);
     if (NULL == block){
         debug_msg("error: fail to get block by pos[%d]", pos);
         return -1;
     }
 
-    return block->preUsedPos;
+    return block->prevUsedPos;
 }
 
 char *memPoolGetNextUsedBlock(void *poolptr, int pos)
@@ -120,7 +120,7 @@ char *memPoolGetNextUsedBlock(void *poolptr, int pos)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemBlock *block = (struct MemBlock *)memPoolGetBlockByPos_(poolbase, pos);
+    struct MemBlockHead *block = (struct MemBlockHead *)memPoolGetBlockByPos_(poolbase, pos);
     if (NULL == block){
         debug_msg("error: fail to get block by pos[%d]", pos);
         return NULL;
@@ -133,7 +133,7 @@ char *memPoolGetNextUsedBlock(void *poolptr, int pos)
     return memPoolGetBlockByPos(poolbase, block->nextUsedPos);
 }
 
-char *memPoolGetPreUsedBlock(void *poolptr, int pos)
+char *memPoolGetprevUsedBlock(void *poolptr, int pos)
 {
     if (NULL == poolptr) {
         debug_msg("error: invalid param, poolptr[%p]", poolptr);
@@ -141,38 +141,38 @@ char *memPoolGetPreUsedBlock(void *poolptr, int pos)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemBlock *block = (struct MemBlock *)memPoolGetBlockByPos_(poolbase, pos);
+    struct MemBlockHead *block = (struct MemBlockHead *)memPoolGetBlockByPos_(poolbase, pos);
     if (NULL == block){
         debug_msg("error: fail to get block by pos[%d]", pos);
         return NULL;
     }
 
-    if (block->preUsedPos < 0) {
+    if (block->prevUsedPos < 0) {
         return NULL;
     }
 
-    return memPoolGetBlockByPos(poolbase, block->preUsedPos);
+    return memPoolGetBlockByPos(poolbase, block->prevUsedPos);
 }
 
-int memPoolInit(void *poolbase, size_t memPoolHeadSize, size_t blockSize, int blockNum)
+int memPoolInit(void *poolbase, size_t customPoolHeadSize, size_t blockSize, int blockNum)
 {
-    if (NULL == poolbase || memPoolHeadSize < 0 || blockSize <= 0 || blockNum <= 0) {
-        debug_msg("invalid param, pool[%p], memPoolHeadSize[%ld] size[%ld], num[%d]",
-                poolbase, memPoolHeadSize, blockSize, blockNum);
+    if (NULL == poolbase || customPoolHeadSize < 0 || blockSize <= 0 || blockNum <= 0) {
+        debug_msg("invalid param, pool[%p], customPoolHeadSize[%ld] size[%ld], num[%d]",
+                poolbase, customPoolHeadSize, blockSize, blockNum);
         return -1;
     }
 
-    struct MemPool *pool = (struct MemPool *)poolbase;
-    pool->memPoolHeadSize = memPoolHeadSize;
-    pool->blockSize = blockSize + sizeof(struct MemBlock);
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
+    pool->customPoolHeadSize = customPoolHeadSize;
+    pool->blockSize = blockSize + sizeof(struct MemBlockHead);
     pool->blockNum = blockNum;
     pool->firstUsedPos = -1;
     pool->lastUsedPos = -1;
     pool->firstAvailPos = 0;
     for (int pos = 0; pos < pool->blockNum; ++pos) {
-        struct MemBlock *block = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase, pos);
+        struct MemBlockHead *block = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase, pos);
         block->isused = 0;
-        block->preUsedPos = -1;
+        block->prevUsedPos = -1;
         block->nextUsedPos = -1;
         if (pos < pool->blockNum - 1) {
             block->nextAvailPos = pos + 1;
@@ -194,9 +194,14 @@ int memPoolAllocBlock(void *poolptr)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
+    if (pool->firstAvailPos < 0) {
+        debug_msg("error: no more block to alloc");
+        return -1;
+    }
+
     int allocpos = pool->firstAvailPos;
-    struct MemBlock *allocBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase, allocpos);
+    struct MemBlockHead *allocBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase, allocpos);
     if (NULL == allocBlock) {
         debug_msg("error: fail to get block by pos[%d]", allocpos);
         return -1;
@@ -216,12 +221,12 @@ int memPoolAllocBlock(void *poolptr)
     }
 
     if (0 <= pool->lastUsedPos) {
-        struct MemBlock *tailBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase,
+        struct MemBlockHead *tailBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase,
                 pool->lastUsedPos);
         tailBlock->nextUsedPos = allocpos;
     }
 
-    allocBlock->preUsedPos = pool->lastUsedPos;
+    allocBlock->prevUsedPos = pool->lastUsedPos;
     allocBlock->nextUsedPos = -1;
     pool->lastUsedPos = allocpos;
 
@@ -236,13 +241,13 @@ int memPoolReleaseBlock(void *poolptr, int pos)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
     if (pos < 0 || pos >= pool->blockNum) {
         debug_msg("error: invalid pos[%d].", pos);
         return -1;
     }
 
-    struct MemBlock *releaseBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase, pos);
+    struct MemBlockHead *releaseBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase, pos);
     if (NULL == releaseBlock) {
         debug_msg("error: fail to get block by pos[%d]", pos);
         return -1;
@@ -257,7 +262,7 @@ int memPoolReleaseBlock(void *poolptr, int pos)
         pool->firstAvailPos = pos;
         pool->lastAvailPos = pos;
     } else {
-        struct MemBlock *lastAvailBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase,
+        struct MemBlockHead *lastAvailBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase,
                 pool->lastAvailPos);
         if (NULL == lastAvailBlock) {
             debug_msg("error: fail to get block by pos[%d]", pool->lastAvailPos);
@@ -276,27 +281,27 @@ int memPoolReleaseBlock(void *poolptr, int pos)
     }
 
     if (pos == pool->lastUsedPos) {
-        pool->lastUsedPos = releaseBlock->preUsedPos;
+        pool->lastUsedPos = releaseBlock->prevUsedPos;
     }
 
-    if (0 <= releaseBlock->preUsedPos) {
-        struct MemBlock *lastUsedBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase,
-                releaseBlock->preUsedPos);
+    if (0 <= releaseBlock->prevUsedPos) {
+        struct MemBlockHead *lastUsedBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase,
+                releaseBlock->prevUsedPos);
         if (NULL == lastUsedBlock) {
-            debug_msg("error: fail to get block by pos[%d]", releaseBlock->preUsedPos);
+            debug_msg("error: fail to get block by pos[%d]", releaseBlock->prevUsedPos);
             return -1;
         }
         lastUsedBlock->nextUsedPos = releaseBlock->nextUsedPos;
     }
 
     if (0 <= releaseBlock->nextUsedPos) {
-        struct MemBlock *nextUsedBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase,
+        struct MemBlockHead *nextUsedBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase,
                 releaseBlock->nextUsedPos);
         if (NULL == nextUsedBlock) {
-            debug_msg("error: fail to get block by pos[%d]", releaseBlock->preUsedPos);
+            debug_msg("error: fail to get block by pos[%d]", releaseBlock->prevUsedPos);
             return -1;
         }
-        nextUsedBlock->preUsedPos = releaseBlock->preUsedPos;
+        nextUsedBlock->prevUsedPos = releaseBlock->prevUsedPos;
     }
 
     return 0;
@@ -309,7 +314,7 @@ char *memPoolGetHead(void *poolbase)
         return NULL;
     }
 
-    return (char *)poolbase + sizeof(struct MemPool);
+    return (char *)poolbase + sizeof(struct MemPoolHead);
 }
 
 size_t memPoolGetBlockSize(void *poolptr)
@@ -320,7 +325,7 @@ size_t memPoolGetBlockSize(void *poolptr)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
 
     return pool->blockSize;
 }
@@ -333,7 +338,7 @@ int memPoolGetBlockNum(void *poolptr)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
 
     return pool->blockNum;
 }
@@ -346,7 +351,7 @@ int memPoolAvailable(void *poolptr)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
 
     return 0 <= pool->firstAvailPos ? 1 : 0;
 }
@@ -359,12 +364,12 @@ int memPoolGetUsedNum(void *poolptr)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
 
     int nextUesdNum = 0;
     int tmppos = pool->firstUsedPos;
     while(0 <= tmppos) {
-        struct MemBlock *tmpBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase, tmppos);
+        struct MemBlockHead *tmpBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase, tmppos);
         if (NULL == tmpBlock) {
             debug_msg("error: fail to get block by pos[%d]", tmppos);
             return -1;
@@ -388,12 +393,12 @@ int memPoolCheck(void *poolptr)
     }
 
     char *poolbase = memPoolGetPoolBase_(poolptr);
-    struct MemPool *pool = (struct MemPool *)poolbase;
+    struct MemPoolHead *pool = (struct MemPoolHead *)poolbase;
 
     int nextUesdNum = 0;
     int tmppos = pool->firstUsedPos;
     while(0 <= tmppos) {
-        struct MemBlock *tmpBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase, tmppos);
+        struct MemBlockHead *tmpBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase, tmppos);
         if (NULL == tmpBlock) {
             debug_msg("error: fail to get block by pos[%d]", tmppos);
             return -1;
@@ -402,27 +407,27 @@ int memPoolCheck(void *poolptr)
         tmppos = tmpBlock->nextUsedPos;
     }
 
-    int preUsedNum = 0;
+    int prevUsedNum = 0;
     tmppos = pool->lastUsedPos;
     while(0 <= tmppos) {
-        struct MemBlock *tmpBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase, tmppos);
+        struct MemBlockHead *tmpBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase, tmppos);
         if (NULL == tmpBlock) {
             debug_msg("error: fail to get block by pos[%d]", tmppos);
             return -1;
         }
-        preUsedNum++;
-        tmppos = tmpBlock->preUsedPos;
+        prevUsedNum++;
+        tmppos = tmpBlock->prevUsedPos;
     }
 
-    if (preUsedNum != nextUesdNum) {
-        debug_msg("error: invalid data, preUsedNum[%d], nextUesdNum[%d]", preUsedNum, nextUesdNum);
+    if (prevUsedNum != nextUesdNum) {
+        debug_msg("error: invalid data, prevUsedNum[%d], nextUesdNum[%d]", prevUsedNum, nextUesdNum);
         return -1;
     }
 
     int availNum = 0;
     tmppos = pool->firstAvailPos;
     while(0 <= tmppos) {
-        struct MemBlock *tmpBlock = (struct MemBlock *)memPoolGetBlockByPos_((char *)poolbase, tmppos);
+        struct MemBlockHead *tmpBlock = (struct MemBlockHead *)memPoolGetBlockByPos_((char *)poolbase, tmppos);
         if (NULL == tmpBlock) {
             debug_msg("error: fail to get block by pos[%d]", tmppos);
             return -1;

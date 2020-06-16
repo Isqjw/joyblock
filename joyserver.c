@@ -1,5 +1,7 @@
-#include <arpa/inet.h>
 #include "joyserver.h"
+
+#include <arpa/inet.h>
+#include <sys/epoll.h>
 
 
 static struct JoyServer joyServer;
@@ -23,7 +25,7 @@ static int joyServerCloseTcp_(struct JoyConnectNode *node)
         debug_msg("error: fail to epoll_ctl(EPOLL_CTL_DEL), fd[%d], errno[%s]", node->cfd, strerror(errno));
     }
 
-    if (0 != joynetReleaseConnectNode(joyServer.cpool, node)) {
+    if (0 != joynetCloseConnectNode(joyServer.cpool, node)) {
         debug_msg("error: fail to del node, fd[%d].", node->cfd);
         return -1;
     }
@@ -56,12 +58,12 @@ static int joyServerStopNode_(struct JoyConnectNode *node)
     stoppkg.headlen = sizeof(stoppkg);
     stoppkg.msgtype = kJoynetMsgTypeStop;
 
-    struct JoyBlockRWBuf wbuf;
+    struct JoynetRWBuf wbuf;
     memset(&wbuf, 0, sizeof(wbuf));
     wbuf.buf[0] = (char *)&stoppkg;
     wbuf.len[0] = stoppkg.headlen;
 
-    int wlen = joynetWriteSendPkg(node, &wbuf);
+    int wlen = joynetWriteSendPkg(node->procid, &wbuf);
     if (0 == wlen) {
         debug_msg("warn: write send pkg len[0]");
         return 0;
@@ -149,12 +151,20 @@ int joyServerProcRecvData()
     int efdcnt = epoll_wait(joyServer.efd, events, kEpollMaxFDs, kJoyServerEpollTimeOut);
     if (efdcnt < 0) {
         if (EINTR == errno) {
+            /*
+             * EINTR  The call was interrupted by a signal handler before either (1)
+             *  any of the requested events occurred or (2) the timeout expired; see signal(7).
+             */
             return 0;
         } else {
-            // close all fd
-            joyServerStopListen();
-            joynetTraverseNode(joyServer.cpool, joyServerCloseTcp_);
+            /*
+             * EBADF  epfd is not a valid file descriptor.
+             * EFAULT The memory area pointed to by events is not accessible with write permissions.
+             * EINVAL epfd is not an epoll file descriptor, or maxevents is less than or equal to zero.
+             */
             debug_msg("error: errno[%s] when epoll.", strerror(errno));
+            // joyServerStopListen();
+            // joynetTraverseNode(joyServer.cpool, joyServerCloseTcp_);
             return -1;
         }
     } else if(0 == efdcnt) {
@@ -163,7 +173,8 @@ int joyServerProcRecvData()
     } else {
         for (int i = 0; i < efdcnt; ++i) {
             if(events[i].data.fd == joyServer.lfd) {
-                struct sockaddr_in clientaddr = { 0 };
+                struct sockaddr_in clientaddr;
+                memset(&clientaddr, 0, sizeof(clientaddr));
                 socklen_t clilen = sizeof(clientaddr);
                 int connfd = accept(events[i].data.fd, (struct sockaddr *)&clientaddr, &clilen);
                 if (connfd < 0) {
@@ -217,7 +228,6 @@ int joyServerProcRecvData()
                 struct JoyConnectNode *node = joynetGetConnectNodeByFD(joyServer.cpool, infd);
                 if (NULL == node) {
                     debug_msg("error: fail to get node by fd[%d]", infd);
-                    joyServerCloseTcp_(node);
                     continue;
                 }
 
@@ -249,7 +259,7 @@ static int joyServerHandleShakeMsg_(struct JoyConnectNode *node)
 
     time_t curtick;
     time(&curtick);
-    if (node->shakebufpos < sizeof(struct JoynetHead)) {
+    if (node->shakelen <= 0) {
         if (node->createtick + kJoynetShakeWaitSecond < curtick) {
             debug_msg("error: shake msg timeout.");
             joyServerCloseTcp_(node);
@@ -263,31 +273,19 @@ static int joyServerHandleShakeMsg_(struct JoyConnectNode *node)
         return -1;
     }
 
-    if (node->shakebufpos < sizeof(*pkghead) + pkghead->bodylen) {
-        return 0;
-    }
-
-    // 处理nid
-    /* int nids = pkghead->bodylen / (sizeof(joyServer.nid[0]));
-    int *nid = (int *)(node->shakebuf + pkghead->headlen);
-    for (int j = 0; j < nids; ++j) {
-        if (nid[j] <= 0 || kJoyServerMaxNid <= nid[j]) {
-            debug_msg("error: invalid nid[%d]", nid[j]);
-            continue;
-        }
-        debug_msg("debug: porcid[%d], nid[%d]", pkghead->srcid, nid[j]);
-        joyServer.nid[nid[j]] = pkghead->srcid;
-    } */
     JoyRecvCallBack callback = joynetGetMsgCallBackFunc(joyServer.cpool, kJoynetMsgTypeShake);
     if (NULL != callback) {
         callback(node->shakebuf + pkghead->headlen, pkghead);
     }
 
     /* debug_msg("debug: get shake pkg, procid[%d]", pkghead->srcid); */
-    node->procid = pkghead->srcid;
     node->status = kJoynetStatusConnected;
-    node->shakebufpos = 0;
-    joyServer.cpool->nodeidx[node->procid] = node->pos;
+    node->shakelen = 0;
+    if (0 != joynetSetNodeProcid(joyServer.cpool, node, pkghead->srcid)) {
+        debug_msg("error: fail to set node procid[%d].", pkghead->srcid);
+        joyServerCloseTcp_(node);
+        return -1;
+    }
 
     struct JoynetHead shakepkg;
     memset(&shakepkg, 0, sizeof(shakepkg));
@@ -312,12 +310,13 @@ static int joyServerHandleMsg_(struct JoyConnectNode *node)
         return -1;
     }
 
-    if (kJoynetStatusConnected != node->status) {
+    // 自己的连接断掉，还是可以把缓存的包发送给其他client
+    /* if (kJoynetStatusConnected != node->status) {
         return 0;
-    }
+    } */
 
     while (1) {
-        struct JoyBlockRWBuf rbuf;
+        struct JoynetRWBuf rbuf;
         memset(&rbuf, 0, sizeof(rbuf));
         int rlen = joynetReadRecvPkg(node, &rbuf);
         if (0 == rlen) {
@@ -326,6 +325,11 @@ static int joyServerHandleMsg_(struct JoyConnectNode *node)
             debug_msg("error: fail to read buf.");
             joyServerCloseTcp_(node);
             break;
+        }
+
+        if (0 == node->procid) {
+            debug_msg("error: read data from procid[%d].", node->procid);
+            return -1;
         }
 
         char *buf = rbuf.buf[0];
@@ -338,13 +342,12 @@ static int joyServerHandleMsg_(struct JoyConnectNode *node)
 
             memcpy(buf, rbuf.buf[0], rbuf.len[0]);
             memcpy(buf + rbuf.len[0], rbuf.buf[1], rbuf.len[1]);
-            /* debug_msg("debug: half head. len1[%d], len2[%d]", rbuf.len[0], rbuf.len[1]); */
+            // debug_msg("debug: half head. len1[%d], len2[%d]", rbuf.len[0], rbuf.len[1]);
         }
 
         struct JoynetHead *pkghead = (struct JoynetHead *)buf;
         switch (pkghead->msgtype) {
-            case kJoynetMsgTypeMsg:
-                {
+            case kJoynetMsgTypeMsg: {
                     JoyRecvCallBack callback = joynetGetMsgCallBackFunc(joyServer.cpool, kJoynetMsgTypeMsg);
                     if (NULL != callback) {
                         callback(buf + pkghead->headlen, pkghead);
@@ -352,14 +355,12 @@ static int joyServerHandleMsg_(struct JoyConnectNode *node)
                     joynetReleaseRecvBuf(node, &rbuf);
                     break;
                 }
-            case kJoynetMsgTypeStop:
-                {
+            case kJoynetMsgTypeStop: {
                     debug_msg("debug: tcp stop, [%d]", node->cfd);
                     joyServerCloseTcp_(node);
                     break;
                 }
-            default:
-                {
+            default: {
                     debug_msg("error: invalid msg type[%d].", pkghead->msgtype);
                     joyServerCloseTcp_(node);
                     return -1;
@@ -415,24 +416,6 @@ int joyServerWriteSendData(const char *buf, int len, int procid, int srcid, int 
         return -1;
     }
 
-    struct JoyConnectNode *node = joynetGetConnectNodeByID(joyServer.cpool, procid);
-    if (NULL == node) {
-        debug_msg("error: fail to get node, procid[%d].", procid);
-        return -1;
-    }
-
-    if (kJoynetStatusConnected != node->status) {
-        debug_msg("error: send to not connected id[%d].", procid);
-        return -1;
-    }
-
-    joyServerProcSendData();
-    // 再次检查，可能在处理发送过程中发生错误，导致fd已关闭
-    if (kJoynetStatusConnected != node->status) {
-        debug_msg("error: send to not connected id[%d].", procid);
-        return -1;
-    }
-
     struct JoynetHead pkghead;
     memset(&pkghead, 0, sizeof(pkghead));
     if (0 != joynetMakePkgHead(&pkghead, buf, len, srcid, dstid, 0)) {
@@ -440,19 +423,15 @@ int joyServerWriteSendData(const char *buf, int len, int procid, int srcid, int 
         return -1;
     }
 
-    struct JoyBlockRWBuf wbuf;
+    struct JoynetRWBuf wbuf;
     memset(&wbuf, 0, sizeof(wbuf));
     wbuf.buf[0] = (char *)&pkghead;
     wbuf.len[0] = pkghead.headlen;
     wbuf.buf[1] = (char *)buf;
     wbuf.len[1] = pkghead.bodylen;
-    int wlen = joynetWriteSendPkg(node, &wbuf);
-    if (0 == wlen) {
-        debug_msg("warn: write send pkg len[0]");
-        return -1;
-    } else if (wlen < 0) {
-        debug_msg("error: fail to write send buf.");
-        joyServerCloseTcp_(node);
+    int wlen = joynetWriteSendPkg(procid, &wbuf);
+    if (wlen <= 0) {
+        debug_msg("warn: write send buf, wlen[%d]", wlen);
         return -1;
     }
 

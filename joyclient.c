@@ -1,5 +1,7 @@
-#include <arpa/inet.h>
 #include "joyclient.h"
+
+#include <arpa/inet.h>
+#include <poll.h>
 
 
 static struct JoyClient joyClient;
@@ -33,7 +35,7 @@ static int joyClientCloseTcp_(struct JoyConnectNode *node)
         return -1;
     }
 
-    if (0 != joynetReleaseConnectNode(joyClient.cpool, node)) {
+    if (0 != joynetCloseConnectNode(joyClient.cpool, node)) {
         debug_msg("error: fail to del node, fd[%d].", node->cfd);
         return -1;
     }
@@ -91,12 +93,12 @@ static int joyClientStop_(struct JoyConnectNode *node)
     stoppkg.srcid = node->procid;
     stoppkg.msgtype = kJoynetMsgTypeStop;
 
-    struct JoyBlockRWBuf wbuf;
+    struct JoynetRWBuf wbuf;
     memset(&wbuf, 0, sizeof(wbuf));
     wbuf.buf[0] = (char *)&stoppkg;
     wbuf.len[0] = stoppkg.headlen;
 
-    int wlen = joynetWriteSendPkg(node, &wbuf);
+    int wlen = joynetWriteSendPkg(node->procid, &wbuf);
     if (0 == wlen) {
         debug_msg("warn: write send pkg len[0]");
         return -1;
@@ -111,11 +113,18 @@ static int joyClientStop_(struct JoyConnectNode *node)
 
 int joyClientInit(JoyRecvCallBack *cmap, struct JoyBlockConfig conf, char *initbuf, int len, int nodeNum, int shmkey)
 {
-    if (NULL == cmap || NULL == initbuf || len < 0) {
+    if (NULL == cmap || NULL == initbuf || len < 0 || kMaxProtoPackBufSize <= len) {
         debug_msg("error: invalid param, cmap[%p], initbuf[%p], len[%d]", cmap, initbuf, len);
         return -1;
     }
     joyClient.shakeDataLen = len;
+    if (0 < joyClient.shakeDataLen) {
+        joyClient.shakeData = (char *)malloc(len);
+        if (NULL == joyClient.shakeData) {
+            debug_msg("error: fail to malloc, size[%d]", len);
+            return -1;
+        }
+    }
     memcpy(joyClient.shakeData, initbuf, len);
 
     return joynetInit(&joyClient.cpool, cmap, conf, nodeNum, shmkey);
@@ -215,13 +224,17 @@ int joyClientConnectTcp(const char *addr, int port, int procid, int routerid)
         joynetClose(sockfd);
         return -1;
     }
-    joyClient.cpool->nodeidx[routerid] = node->pos;
+
+    if (0 != joynetSetNodeProcid(joyClient.cpool, node, routerid)) {
+        debug_msg("error: fail to set node procid[%d].", routerid);
+        joyClientCloseTcp_(node);
+        return -1;
+    }
+
     debug_msg("debug: insert node, fd[%d].", node->cfd);
 
     joynetSetSendBufSize(sockfd, kJoyClientSendBufSize);
     joynetSetRecvBufSize(sockfd, kJoyClientRecvBufSize);
-
-    node->procid = routerid;
 
     struct sockaddr_in servaddr;
     bzero(&servaddr,sizeof(servaddr));
@@ -292,7 +305,7 @@ int joyClientProcRecvData()
         }
         tmppos = joynetGetNextUsedPos(joyClient.cpool, tmppos);
 
-        if (kJoynetStatusConnected != node->status && kJoynetStatusShakeHand != node->status) {
+        if (0 == node->cfd) {
             return 0;
         }
 
@@ -341,7 +354,7 @@ static int joyClientHandleShakeMsg_(struct JoyConnectNode *node)
 
     time_t curtick;
     time(&curtick);
-    if (node->shakebufpos < sizeof(struct JoynetHead)) {
+    if (node->shakelen <= 0) {
         if (node->createtick + kJoynetShakeWaitSecond < curtick) {
             debug_msg("error: shake msg timeout.");
             joyClientCloseTcp_(node);
@@ -356,7 +369,7 @@ static int joyClientHandleShakeMsg_(struct JoyConnectNode *node)
     }
 
     node->status = kJoynetStatusConnected;
-    node->shakebufpos = 0;
+    node->shakelen = 0;
     debug_msg("debug: shake hands success.");
 
     return 0;
@@ -369,12 +382,12 @@ static int joyClientHandleMsg_(struct JoyConnectNode *node)
         return -1;
     }
 
-    if (kJoynetStatusConnected != node->status) {
+    /* if (kJoynetStatusConnected != node->status) {
         return 0;
-    }
+    } */
 
     while (1) {
-        struct JoyBlockRWBuf rbuf;
+        struct JoynetRWBuf rbuf;
         memset(&rbuf, 0, sizeof(rbuf));
         int rlen = joynetReadRecvPkg(node, &rbuf);
         if (0 == rlen) {
@@ -446,7 +459,8 @@ static int joyClientNodeShenData_(struct JoyConnectNode *node)
         return -1;
     }
 
-    if (kJoynetStatusConnected != node->status) {
+    // 消息包, 停服response包
+    if (kJoynetStatusConnected != node->status && kJoynetStatusStop != node->status) {
         return 0;
     }
 
@@ -505,24 +519,6 @@ int joyClientWriteSendData(const char *buf, int len, int srcid, int dstid, int d
         return -1;
     }
 
-    struct JoyConnectNode *node = joyClientSelectNode_();
-    if (NULL == node) {
-        debug_msg("error: fail to select node.");
-        return -1;
-    }
-
-    if (kJoynetStatusConnected != node->status) {
-        debug_msg("error: send to not connected id[%d].", dstid);
-        return -1;
-    }
-
-    joyClientProcSendData();
-    // 再次检查，可能在处理发送过程中发生错误，导致fd已关闭
-    if (kJoynetStatusConnected != node->status) {
-        debug_msg("error: send to not connected id[%d].", dstid);
-        return -1;
-    }
-
     struct JoynetHead pkghead;
     memset(&pkghead, 0, sizeof(pkghead));
     if (0 != joynetMakePkgHead(&pkghead, buf, len, srcid, dstid, dstnid)) {
@@ -530,19 +526,16 @@ int joyClientWriteSendData(const char *buf, int len, int srcid, int dstid, int d
         return -1;
     }
 
-    struct JoyBlockRWBuf wbuf;
+    struct JoynetRWBuf wbuf;
     memset(&wbuf, 0, sizeof(wbuf));
     wbuf.buf[0] = (char *)&pkghead;
     wbuf.len[0] = pkghead.headlen;
     wbuf.buf[1] = (char *)buf;
     wbuf.len[1] = pkghead.bodylen;
-    int wlen = joynetWriteSendPkg(node, &wbuf);
-    if (0 == wlen) {
-        debug_msg("warn: write send pkg len[0]");
-        return -1;
-    } else if (wlen < 0) {
-        debug_msg("error: fail to write send buf.");
-        joyClientCloseTcp_(node);
+
+    int wlen = joynetWriteSendPkg(dstid, &wbuf);
+    if (wlen <= 0) {
+        debug_msg("error: fail to write send buf, wlen[%d]", wlen);
         return -1;
     }
 
@@ -582,6 +575,8 @@ int main()
     long int totallen = 0;
     int nodecnt = 512;
     int pkgcnt = 10;
+    /* int nodecnt = 1;
+    int pkgcnt = 2; */
     const char *ip = "192.168.1.185";
     int port = 20000;
     for (int i = 0; i < nodecnt; ++i) {
@@ -605,6 +600,7 @@ int main()
             break;
         }
 
+        joyClientProcSendData();
         joyClientReadRecvData();
     }
 
