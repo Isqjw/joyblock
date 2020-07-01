@@ -593,8 +593,8 @@ int main()
     const char *test = "1234567890qwertyuioplkjhgfdsazxcvbnm,.;?";
     long int totallen = 0;
     int nodecnt = 1;
-    int pkgcnt = 10;
-    const char *ip = "127.0.0.1";
+    int pkgcnt = 65535;
+    const char *ip = "192.168.1.185";
     int port = 20000;
 
     for (int i = 0; i < nodecnt; ++i) {
@@ -602,11 +602,11 @@ int main()
     }
 
     while (1) {
-        /* time(&now);
+        time(&now);
         if (now < tick + 1) {
             continue;
         }
-        tick = now; */
+        tick = now;
         char allready = 1;
         for (int i = 0; i < nodecnt; ++i) {
             struct JoyConnectNode *node = joynetGetConnectNodeByID(joyClient.cpool, i + 1);
@@ -621,6 +621,7 @@ int main()
             break;
         }
 
+        joyClientProcRecvData();
         joyClientProcSendData();
         joyClientReadRecvData();
     }
@@ -631,11 +632,13 @@ int main()
             if (0 == joyClientWriteSendData(test, len, j + 1, j + 1, 0)) {
                 totallen += len;
             }
+            joyClientProcRecvData();
             joyClientReadRecvData();
         }
     }
 
     while(1){
+        joyClientProcRecvData();
         joyClientProcSendData();
         joyClientReadRecvData();
         time(&now);

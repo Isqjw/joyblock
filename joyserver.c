@@ -536,6 +536,7 @@ int main()
     time_t tick, now;
     time(&tick);
     while (1) {
+        joyServerProcRecvData();
         joyServerReadRecvData();
         joyServerProcSendData();
         time(&now);
