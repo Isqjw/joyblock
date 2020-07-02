@@ -264,6 +264,10 @@ int joyClientConnectTcp(const char *addr, int port, int routerid)
 
 int joyClientProcRecvData()
 {
+    // 处理临时缓存中的数据
+    joynetTraverseNode(joyClient.cpool, joynetReadRecvBuf);
+
+    // 处理网络数据
     int totallen = 0;
     int tmppos = joynetGetNextUsedPos(joyClient.cpool, -1);
     while(0 <= tmppos) {

@@ -77,11 +77,13 @@ int joynetSetSendBufSize(int sockfd, unsigned int bufsize);
 int joynetSetRecvBufSize(int sockfd, unsigned int bufsize);
 
 int joynetSend(int fd, const char *buf, int len, int to);
+int joynetWriteSendBuf(struct JoyConnectNode* node, int procid);
 int joynetSendBuf(struct JoyConnectNode* node, int procid);
 int joynetWriteSendPkg(int procid, struct JoynetRWBuf *wbuf);
 int joynetWriteRecvPkg(struct JoynetRWBuf *wbuf);
 
 int joynetRecv(int fd, char *buf, int len, int to);
+int joynetReadRecvBuf(struct JoyConnectNode* node);
 int joynetRecvBuf(struct JoyConnectNode* node);
 int joynetReadRecvPkg(struct JoynetRWBuf *rbuf);
 int joynetReleaseRecvBuf(struct JoynetRWBuf *rbuf);

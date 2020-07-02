@@ -124,7 +124,8 @@ int joynetRecv(int fd, char *buf, int len, int to)
     return rlen;
 }
 
-int joynetSendBuf(struct JoyConnectNode* node, int procid)
+// 从block读取, 再写入临时缓存
+int joynetWriteSendBuf(struct JoyConnectNode* node, int procid)
 {
     if (procid < 0 || kJoynetMaxProcID <= procid || NULL == node) {
         debug_msg("error: invalid param, node[%p], procid[%d].", node, procid);
@@ -164,6 +165,21 @@ int joynetSendBuf(struct JoyConnectNode* node, int procid)
         joyBlockReleaseSendBuf(procid, &rbuf);
     }
 
+    return 0;
+}
+
+// 向网络发送临时缓存
+int joynetSendBuf(struct JoyConnectNode* node, int procid)
+{
+    if (procid < 0 || kJoynetMaxProcID <= procid || NULL == node) {
+        debug_msg("error: invalid param, node[%p], procid[%d].", node, procid);
+        return -1;
+    }
+
+    if (joynetWriteSendBuf(node, procid) < 0) {
+        debug_msg("error: fail to write send buf");
+        return -1;
+    }
 
     if (0 < node->sendlen) {
         int slen = joynetSend(node->cfd, node->sendbuf, node->sendlen, 0);
@@ -183,22 +199,16 @@ int joynetSendBuf(struct JoyConnectNode* node, int procid)
     return 0;
 }
 
-int joynetRecvBuf(struct JoyConnectNode* node)
+// 读取临时缓存, 再写入block
+int joynetReadRecvBuf(struct JoyConnectNode* node)
 {
     if (NULL == node) {
         debug_msg("error: invalid param, node[%p].", node);
         return -1;
     }
 
-    int leftroom = kJoynetTempBufSize - node->recvlen;
-    int rlen = 0;
-    if (0 < leftroom) {
-        rlen = joynetRecv(node->cfd, node->recvbuf + node->recvlen, leftroom, 0);
-        if (rlen < 0) {
-            debug_msg("error: fail to recv buf.");
-            return -1;
-        }
-        node->recvlen += rlen;
+    if (node->recvlen <= 0) {
+        return 0;
     }
 
     int curpos = 0;
@@ -244,6 +254,35 @@ int joynetRecvBuf(struct JoyConnectNode* node)
 
     if (0 < node->recvlen && 0 < curpos) {
         memmove(node->recvbuf, node->recvbuf + curpos, node->recvlen);
+    }
+
+    return 0;
+}
+
+// 从网络接受数据, 写入临时缓存
+int joynetRecvBuf(struct JoyConnectNode* node)
+{
+    if (NULL == node) {
+        debug_msg("error: invalid param, node[%p].", node);
+        return -1;
+    }
+
+    int leftroom = kJoynetTempBufSize - node->recvlen;
+    int rlen = 0;
+    if (0 < leftroom) {
+        rlen = joynetRecv(node->cfd, node->recvbuf + node->recvlen, leftroom, 0);
+        if (rlen < 0) {
+            debug_msg("error: fail to recv buf.");
+            return -1;
+        }
+        node->recvlen += rlen;
+    }
+
+    if (0 < node->recvlen) {
+        if (joynetReadRecvBuf(node) < 0) {
+            debug_msg("error: fail to read recv buf.");
+            return -1;
+        }
     }
 
     return rlen;
@@ -350,6 +389,10 @@ int joynetCloseConnectNode(struct JoyConnectPool *cp, struct JoyConnectNode *nod
     if (NULL != node->shakebuf) {
         free(node->shakebuf);
         node->shakebuf = NULL;
+    }
+
+    if (0 < node->recvlen) {
+        joynetReadRecvBuf(node);
     }
 
     if (NULL != node->recvbuf) {

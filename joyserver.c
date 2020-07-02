@@ -185,6 +185,10 @@ int joyServerStop()
 
 int joyServerProcRecvData()
 {
+    // 处理临时缓存中的数据
+    joynetTraverseNode(joyServer.cpool, joynetReadRecvBuf);
+
+    // 处理网络数据
     int totallen = 0;
     struct epoll_event events[kEpollMaxFDs];
     int efdcnt = epoll_wait(joyServer.efd, events, kEpollMaxFDs, kJoyServerEpollTimeOut);
