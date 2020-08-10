@@ -18,14 +18,20 @@ struct JoyBlock {
     char data[1];       // 每个block4M,非循环队列,具体大小可以配置
 };
 
+struct JoyChainHead {
+    int head;
+    int tail;
+    int len;
+};
+
 // 缓存链表
 struct JoyBlockChain {
-    int sendhead;   // block链表头
+    struct JoyChainHead sendhead; // block链表头
 };
 
 struct JoyBlockMem {
     struct JoyBlockConfig cfg;
-    int recvhead;   // block链表头(所有node共用一个接收缓存)
+    struct JoyChainHead recvhead; // block链表头(所有node共用一个接收缓存)
     // block链表索引(zoneid作为下标)
     struct JoyBlockChain blockChains[kJoynetMaxProcID];
 };

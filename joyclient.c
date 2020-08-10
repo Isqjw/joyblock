@@ -148,9 +148,6 @@ int joyClientStop()
 
 int joyClientConnectTcp(const char *addr, int port, int routerid)
 {
-    time_t tick;
-    time(&tick);
-
     struct JoyConnectNode *node = joynetGetConnectNodeByID(joyClient.cpool, routerid);
     if (NULL != node && (kJoynetStatusConnected == node->status || kJoynetStatusShakeHand == node->status)) {
         return 0;
@@ -167,12 +164,8 @@ int joyClientConnectTcp(const char *addr, int port, int routerid)
             joyClientCloseTcp_(node);
             return -1;
         }
-        if (tick <= node->createtick + kJoyClientConnectTimeOut) {
-            return 0;
-        }
-        debug_msg("debug: connect timeout.");
-        joyClientCloseTcp_(node);
     }
+
     debug_msg("debug: startting connect tcp.");
 
     int sockfd = socket(AF_INET, SOCK_STREAM, 0);
@@ -424,7 +417,7 @@ int joyClientReadRecvData()
 static struct JoyConnectNode *joyClientSelectNode_()
 {
     int nodes = 0;
-    struct JoyConnectNode *node[kEpollMaxFDs] = { 0 };
+    struct JoyConnectNode *node[kEpollMaxFDs];
 
     int tmppos = joynetGetNextUsedPos(joyClient.cpool, -1);
     while(0 <= tmppos) {
@@ -442,15 +435,11 @@ static struct JoyConnectNode *joyClientSelectNode_()
     }
 
     if (nodes <= 0) {
-        /* debug_msg("error: hava not available node."); */
+        debug_msg("error: hava not available node.");
         return NULL;
     }
 
-    // tick当作随机
-    time_t curtick;
-    time(&curtick);
-
-    return node[(curtick % nodes)];
+    return node[(rand() % nodes)];
 }
 
 int joyClientProcSendData()
@@ -488,7 +477,6 @@ int joyClientProcSendData()
             continue;
         }
 
-        // TODO
         int slen = joynetSendBuf(cnode, joyClient.cfg.procid);
         if (slen < 0) {
             debug_msg("error: fail to send buf, fd[%d].", cnode->cfd);
@@ -504,7 +492,7 @@ int joyClientProcSendData()
 
 int joyClientWriteSendData(const char *buf, int len, int srcid, int dstid, int dstnid)
 {
-    if (NULL == buf || len <= 0) {
+    if (NULL == buf || len <= 0 || kJoynetTempBufSize <= len) {
         debug_msg("error: invalid param, buf[%p], len[%d].", buf, len);
         return -1;
     }
@@ -532,7 +520,7 @@ int joyClientWriteSendData(const char *buf, int len, int srcid, int dstid, int d
         return -1;
     }
 
-    joyClientProcSendData();
+    // joyClientProcSendData();
 
     return 0;
 }

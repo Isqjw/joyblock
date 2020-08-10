@@ -145,6 +145,13 @@ int joynetWriteSendBuf(struct JoyConnectNode* node, int procid)
             debug_msg("error: fail to read send pkg, procid[%d]", procid);
             return -1;
         } else {
+            if (kJoynetTempBufSize <= rlen) {
+                // 直接丢弃
+                joyBlockReleaseSendBuf(procid, &rbuf);
+                debug_msg("errror: send pkg size[%d] to large.", rlen);
+                break;
+            }
+
             if (leftroom <= rlen || 0 == rlen) {
                 break;
             }
@@ -217,7 +224,7 @@ int joynetReadRecvBuf(struct JoyConnectNode* node)
         struct JoynetHead *pkghead = (struct JoynetHead *)(node->recvbuf + curpos);
 
         // 校验
-        if (pkghead->headlen != pkgHeadSize) {
+        if (pkghead->headlen != pkgHeadSize || (kJoynetTempBufSize <= pkghead->headlen + pkghead->bodylen)) {
             debug_msg("error: invalid pkg, headlen[%d], bodylen[%d]", pkghead->headlen, pkghead->bodylen);
             return -1;
         }
@@ -386,13 +393,13 @@ int joynetCloseConnectNode(struct JoyConnectPool *cp, struct JoyConnectNode *nod
 
     joynetClose(node->cfd);
 
+    if (0 < node->recvlen) {
+        joynetReadRecvBuf(node);
+    }
+
     if (NULL != node->shakebuf) {
         free(node->shakebuf);
         node->shakebuf = NULL;
-    }
-
-    if (0 < node->recvlen) {
-        joynetReadRecvBuf(node);
     }
 
     if (NULL != node->recvbuf) {

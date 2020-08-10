@@ -22,10 +22,15 @@ static struct JoyBlock *joyBlockGetBlockByPos_(int pos)
     return (struct JoyBlock *)memPoolGetBlockByPos(g_blockmem, pos);
 }
 
-static int joyBlockAlloc_()
+static int joyBlockAlloc_(struct JoyChainHead *chead)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
+        return -1;
+    }
+
+    if (NULL == chead) {
+        debug_msg("error: invalid param, chead[%p]", chead);
         return -1;
     }
 
@@ -44,15 +49,60 @@ static int joyBlockAlloc_()
     memset(allocBlock, 0, sizeof(*allocBlock));
     allocBlock->nextUsedPos = -1;
 
+    if (-1 == chead->head) {
+        chead->head = allocpos;
+    } else {
+        struct JoyBlock *tailBlock = joyBlockGetBlockByPos_(chead->tail);
+        tailBlock->nextUsedPos = allocpos;
+    }
+    chead->tail = allocpos;
+    chead->len += 1;
+
     return allocpos;
 }
 
-static int joyBlockRelease_(int pos)
+static int joyBlockRelease_(struct JoyChainHead *chead, int pos)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
         return -1;
     }
+
+    if (NULL == chead || pos < 0 || chead->head < 0) {
+        debug_msg("error: invalid param, chead[%p], pos[%d], chain head[%d]", chead, pos, chead->head);
+        return -1;
+    }
+
+    int curpos = chead->head;
+    struct JoyBlock *prevBlock = joyBlockGetBlockByPos_(curpos);
+    struct JoyBlock *curBlock = prevBlock;
+
+    while(NULL != curBlock) {
+        if (curpos == pos) {
+            break;
+        }
+
+        curpos = curBlock->nextUsedPos;
+        prevBlock = curBlock;
+        curBlock = joyBlockGetBlockByPos_(curpos);
+    }
+
+    if (NULL == curBlock) {
+        debug_msg("error: fail to find block by pos[%d]", pos);
+        return -1;
+    }
+
+    if (chead->head == pos) {
+        if (chead->head == chead->tail) {
+            chead->head = -1;
+            chead->tail = -1;
+        } else {
+            chead->head = curBlock->nextUsedPos;
+        }
+    } else {
+        prevBlock->nextUsedPos = curBlock->nextUsedPos;
+    }
+    chead->len -= 1;
 
     if (0 != memPoolReleaseBlock(g_blockmem, pos)) {
         debug_msg("error: fail to release block, pos[%d]", pos);
@@ -62,49 +112,15 @@ static int joyBlockRelease_(int pos)
     return 0;
 }
 
-static int JoyBlockTraverseChain_(int head, int *tailpos, int *chainlen)
-{
-    if (NULL == tailpos || NULL == chainlen) {
-        debug_msg("error: invalid param, tailpos[%p], chainlen[%p]", tailpos, chainlen);
-        return -1;
-    }
-
-    if (head < 0) {
-        *tailpos = -1;
-        *chainlen = 0;
-        return 0;
-    }
-
-    int curpos = head;
-    int nextpos = head;
-    int count = 0;
-
-    while(0 <= nextpos) {
-        struct JoyBlock *tmpblock = joyBlockGetBlockByPos_(nextpos);
-        if (NULL == tmpblock) {
-            debug_msg("error: fail to get block by pos[%d].", nextpos);
-            return -1;
-        }
-        count++;
-        curpos = nextpos;
-        nextpos = tmpblock->nextUsedPos;
-    }
-
-    *chainlen = count;
-    *tailpos = curpos;
-
-    return 0;
-}
-
-static int joyBlockWritePkg_(int *head, struct JoynetRWBuf *wbuf, int chainLenLimit)
+static int joyBlockWritePkg_(struct JoyChainHead *chead, struct JoynetRWBuf *wbuf, int chainLenLimit)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
         return -1;
     }
 
-    if (NULL == head || NULL == wbuf || chainLenLimit <= 0) {
-        debug_msg("error: invalid param, head[%p], wbuf[%p], chainLenLimit[%d]", head, wbuf, chainLenLimit);
+    if (NULL == chead || NULL == wbuf || chainLenLimit <= 0) {
+        debug_msg("error: invalid param, chead[%p], wbuf[%p], chainLenLimit[%d]", chead, wbuf, chainLenLimit);
         return -1;
     }
 
@@ -114,64 +130,48 @@ static int joyBlockWritePkg_(int *head, struct JoynetRWBuf *wbuf, int chainLenLi
         return 0;
     }
 
-    int tailpos;
-    int chainlen;
-    if (0 != JoyBlockTraverseChain_(*head, &tailpos, &chainlen)) {
-        debug_msg("error: fail to traverse block chain, head[%d]", *head);
-        return -1;
-    }
-
-    if (0 == chainlen) {
+    if (0 == chead->len) {
         if (1 != memPoolAvailable(g_blockmem)) {
             debug_msg("warn: have not available block to alloc");
             return 0;
         }
 
-        int allocpos = joyBlockAlloc_();
+        int allocpos = joyBlockAlloc_(chead);
         if (allocpos < 0) {
             debug_msg("error: fail to alloc block.");
             return -1;
         }
-
-        *head = allocpos;
-        tailpos = allocpos;
-        chainlen = 1;
     }
 
-    struct JoyBlock *tailBlock = joyBlockGetBlockByPos_(tailpos);
+    struct JoyBlock *tailBlock = joyBlockGetBlockByPos_(chead->tail);
     if (NULL == tailBlock) {
-        debug_msg("erro: fail to get block by pos[%d]", tailpos);
+        debug_msg("erro: fail to get block by pos[%d]", chead->tail);
         return -1;
     }
 
     int leftroom = g_blockmem->cfg.blockSize - tailBlock->dataTail;
     if (leftroom < totallen) {
-        if (chainLenLimit <= chainlen) {
-            debug_msg("error: write buffer is full, chain len[%d], chain head[%d]", chainlen, *head);
+        if (chainLenLimit <= chead->len) {
+            debug_msg("error: write buffer is full, chain len[%d], chain head[%d]", chead->len, chead->head);
             return 0;
         }
 
         if (1 != memPoolAvailable(g_blockmem)) {
-            debug_msg("warn: write buffer is full, and have not available block, chain head[%d]", *head);
+            debug_msg("warn: write buffer is full, and have not available block, chain head[%d]", chead->head);
             return 0;
         }
 
-        int allocpos = joyBlockAlloc_();
+        int allocpos = joyBlockAlloc_(chead);
         if (allocpos < 0) {
             debug_msg("error: fail to alloc block.");
             return -1;
         }
 
-        struct JoyBlock *newBlock = joyBlockGetBlockByPos_(allocpos);
-        if (NULL == newBlock) {
+        tailBlock = joyBlockGetBlockByPos_(allocpos);
+        if (NULL == tailBlock) {
             debug_msg("fail to get block by pos[%d]", allocpos);
             return -1;
         }
-
-        tailBlock->nextUsedPos = allocpos;
-        tailBlock = newBlock;
-        tailpos = allocpos;
-        chainlen++;
     }
 
     for (int i = 0; i < 2; ++i) {
@@ -261,15 +261,15 @@ static int joyBlockReadPkg_(int head, struct JoynetRWBuf *rbuf)
     return pkgsize;
 }
 
-static int joyBlockReleaseReadBuf_(int *head, struct JoynetRWBuf *rbuf)
+static int joyBlockReleaseReadBuf_(struct JoyChainHead *chead, struct JoynetRWBuf *rbuf)
 {
     if (NULL == g_blockmem) {
         debug_msg("error: g_blockmem is NULL.");
         return -1;
     }
 
-    if (NULL == head || NULL == rbuf) {
-        debug_msg("error: invalid param, head[%p], rbuf[%p]", head, rbuf);
+    if (NULL == chead || NULL == rbuf) {
+        debug_msg("error: invalid param, chain[%p], rbuf[%p]", chead, rbuf);
         return -1;
     }
 
@@ -283,9 +283,9 @@ static int joyBlockReleaseReadBuf_(int *head, struct JoynetRWBuf *rbuf)
             continue;
         }
 
-        struct JoyBlock *headBlock = joyBlockGetBlockByPos_(*head);
+        struct JoyBlock *headBlock = joyBlockGetBlockByPos_(chead->head);
         if (NULL == headBlock) {
-            debug_msg("error: fail to get block by pos[%d]", *head);
+            debug_msg("error: fail to get block by pos[%d]", chead->head);
             return -1;
         }
 
@@ -297,9 +297,8 @@ static int joyBlockReleaseReadBuf_(int *head, struct JoynetRWBuf *rbuf)
 
         headBlock->dataHead += rbuf->len[i];
         if (headBlock->dataHead == headBlock->dataTail) {
-            int curhead = *head;
-            *head = headBlock->nextUsedPos;
-            if (0 != joyBlockRelease_(curhead)) {
+            int curhead = chead->head;
+            if (0 != joyBlockRelease_(chead, curhead)) {
                 debug_msg("error: fail to release block, pos[%d]", curhead);
                 return -1;
             }
@@ -340,6 +339,12 @@ int joyBlockInit(struct JoyBlockConfig cfg)
         return -1;
     }
 
+    // blockSize小于临时缓存Size将导致比blockSize还大的包永远无法写入block,永远占用tmpBuf
+    if (cfg.blockSize <= kJoynetTempBufSize) {
+        debug_msg("error: block size[%d] small than tmp buf size[%d].", cfg.blockSize, kJoynetTempBufSize);
+        return -1;
+    }
+
     size_t msize = memPoolCalSize(sizeof(struct JoyBlockMem), sizeof(struct JoyBlock) + cfg.blockSize, cfg.blockNum);
     if (msize <= 0) {
         debug_msg("error: invalid pool size[%ld]", msize);
@@ -356,8 +361,15 @@ int joyBlockInit(struct JoyBlockConfig cfg)
     memPoolInit(poolbase, sizeof(struct JoyBlockMem), sizeof(struct JoyBlock) + cfg.blockSize, cfg.blockNum);
     g_blockmem = (struct JoyBlockMem *)memPoolGetHead(poolbase);
     g_blockmem->cfg = cfg;
-    g_blockmem->recvhead = -1;
-    memset(g_blockmem->blockChains, -1, sizeof(g_blockmem->blockChains));
+    g_blockmem->recvhead.head = -1;
+    g_blockmem->recvhead.tail = -1;
+    g_blockmem->recvhead.len = 0;
+    for (int i = 0; i < kJoynetMaxProcID; ++i) {
+        struct JoyChainHead *chead = &(g_blockmem->blockChains[i].sendhead);
+        chead->head = -1;
+        chead->tail = -1;
+        chead->len = 0;
+    }
 
     return 0;
 }
@@ -409,7 +421,7 @@ int joyBlockReadRecvPkg(struct JoynetRWBuf *rbuf)
         return -1;
     }
 
-    int rlen = joyBlockReadPkg_(g_blockmem->recvhead, rbuf);
+    int rlen = joyBlockReadPkg_(g_blockmem->recvhead.head, rbuf);
 
     return rlen;
 }
@@ -428,7 +440,7 @@ int joyBlockReadSendPkg(int procid, struct JoynetRWBuf *rbuf)
 
     struct JoyBlockChain *blockChain = g_blockmem->blockChains + procid;
 
-    int rlen = joyBlockReadPkg_(blockChain->sendhead, rbuf);
+    int rlen = joyBlockReadPkg_(blockChain->sendhead.head, rbuf);
 
     return rlen;
 }
@@ -522,14 +534,14 @@ int joyBlockMemCheck()
 
     int usedBlockNum = 0;
     for (int i = 0; i < kJoynetMaxProcID; ++i) {
-        int headpos = g_blockmem->blockChains[i].sendhead;
-        if (-1 == headpos) {
+        struct JoyChainHead *chead = &(g_blockmem->blockChains[i].sendhead);
+        if (-1 == chead->head) {
             continue;
         }
 
-        struct JoyBlock *headBlock = joyBlockGetBlockByPos_(headpos);
+        struct JoyBlock *headBlock = joyBlockGetBlockByPos_(chead->head);
         if (NULL == headBlock) {
-            debug_msg("error: fail to get block by pos[%d].", headpos);
+            debug_msg("error: fail to get block by pos[%d].", chead->head);
             return -1;
         }
 
@@ -543,21 +555,15 @@ int joyBlockMemCheck()
             return -1;
         }
 
-        int tailpos;
-        int chainlen;
-        if (0 != JoyBlockTraverseChain_(headpos, &tailpos, &chainlen)) {
-            debug_msg("error: fail to traverse block chain, headpos[%d]", headpos);
-            return -1;
-        }
-        usedBlockNum += chainlen;
+        usedBlockNum += chead->len;
     }
     debug_msg("debug: send num[%d]", usedBlockNum);
 
-    int headpos = g_blockmem->recvhead;
-    if (0 <= headpos) {
-        struct JoyBlock *headBlock = joyBlockGetBlockByPos_(headpos);
+    struct JoyChainHead *chead = &g_blockmem->recvhead;
+    if (0 <= chead->head) {
+        struct JoyBlock *headBlock = joyBlockGetBlockByPos_(chead->head);
         if (NULL == headBlock) {
-            debug_msg("error: fail to get block by pos[%d].", headpos);
+            debug_msg("error: fail to get block by pos[%d].", chead->head);
             return -1;
         }
 
@@ -571,14 +577,8 @@ int joyBlockMemCheck()
             return -1;
         }
 
-        int tailpos;
-        int chainlen;
-        if (0 != JoyBlockTraverseChain_(headpos, &tailpos, &chainlen)) {
-            debug_msg("error: fail to traverse block chain, headpos[%d]", headpos);
-            return -1;
-        }
-        usedBlockNum += chainlen;
-        debug_msg("debug: recv num[%d]", chainlen);
+        usedBlockNum += chead->len;
+        debug_msg("debug: recv num[%d]", chead->len);
     }
 
     int memUsedBlockNum = memPoolGetUsedNum(g_blockmem);

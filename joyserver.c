@@ -448,7 +448,7 @@ int joyServerProcSendData()
 
 int joyServerWriteSendData(const char *buf, int len, int procid, int srcid, int dstid)
 {
-    if (NULL == buf || len <= 0) {
+    if (NULL == buf || len <= 0 || kJoynetTempBufSize <= len) {
         debug_msg("error: invalid param, buf[%p], len[%d].", buf, len);
         return -1;
     }
